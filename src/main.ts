@@ -6,6 +6,7 @@ import { relationRenderer } from './relationRenderer';
 import { relationInteraction } from './relationInteraction';
 import { toolbar } from './toolbar';
 import { contextMenu } from './contextMenu';
+import { history } from './history';
 import { closest } from './util';
 
 function deleteSelected(): void {
@@ -48,6 +49,7 @@ function onCanvasBackgroundContextMenu(e: MouseEvent): void {
 
 function init(): void {
   state.load();
+  history.init();
 
   const viewportEl = document.getElementById('canvas-viewport')!;
   const transformEl = document.getElementById('canvas-transform')!;

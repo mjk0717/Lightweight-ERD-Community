@@ -45,6 +45,8 @@ body { display: flex; flex-direction: column; }
 .btn-primary:hover { background: #1d4ed8; }
 .btn-danger { background: #b91c1c; border-color: #991b1b; }
 .btn-danger:hover { background: #991b1b; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn:disabled:hover { background: #334155; }
 
 /* ---------- canvas ---------- */
 #canvas-viewport {

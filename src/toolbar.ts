@@ -7,6 +7,7 @@ import { ddlExport } from './ddlExport';
 import { pngExport } from './pngExport';
 import { jsonIO } from './jsonIO';
 import { viewport } from './viewport';
+import { history } from './history';
 import { Entity } from './types';
 
 function addTableAt(x: number, y: number): void {
@@ -51,6 +52,19 @@ function initLineStyleButton(): void {
   state.on('change', sync);
 }
 
+function initUndoRedoButtons(): void {
+  const undoBtn = document.getElementById('btn-undo') as HTMLButtonElement | null;
+  const redoBtn = document.getElementById('btn-redo') as HTMLButtonElement | null;
+  if (!undoBtn || !redoBtn) return;
+  const sync = () => { undoBtn.disabled = !history.canUndo(); redoBtn.disabled = !history.canRedo(); };
+  sync();
+  undoBtn.addEventListener('click', () => { history.undo(); sync(); });
+  redoBtn.addEventListener('click', () => { history.redo(); sync(); });
+  state.on('change', sync);
+  state.on('move', sync);
+  state.on('select', sync);
+}
+
 function init(): void {
   bind('btn-import-ddl', () => ddlImport.open());
   bind('btn-export-png', () => pngExport.exportPng());
@@ -62,6 +76,7 @@ function init(): void {
   bind('btn-clear-all', clearAll);
   initModeSwitch();
   initLineStyleButton();
+  initUndoRedoButtons();
 }
 
 export const toolbar = { init, addTableAt };
