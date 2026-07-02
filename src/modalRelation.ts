@@ -93,10 +93,10 @@ function openCreate(sourceEntityId: string, targetEntityId: string): void {
         const sCol = sel && sourceEntity!.columns.find((c) => c.id === sel.value);
         return sCol ? 'Column "' + sCol.name + '" on ' + sourceEntity!.name + ' will be marked as FK and join its primary key.' : '';
       });
-      previewEl.textContent = lines.filter(Boolean).join(' ');
+      previewEl.textContent = lines.filter(Boolean).join('\n');
       return;
     }
-    previewEl.textContent = cols.map((c) => previewLine(sourceEntity!, c, targetEntity!.name)).join(' ');
+    previewEl.textContent = cols.map((c) => previewLine(sourceEntity!, c, targetEntity!.name)).join('\n');
   }
 
   function renderMapping(): void {
