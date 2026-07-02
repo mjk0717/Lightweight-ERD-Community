@@ -1,5 +1,5 @@
 import { nextId } from './util';
-import { Column, DdlFkCandidate, DdlParseResult, DdlRelation, DdlTable } from './types';
+import { Column, DdlFkCandidate, DdlParseResult, DdlPkUpdate, DdlRelation, DdlTable } from './types';
 
 // Lightweight regex/scanner based Oracle DDL reader. It intentionally only
 // understands the handful of statement shapes needed for reverse-engineering
@@ -219,13 +219,20 @@ function parseAlterTableAddParen(stmt: string): AlterTableAddResult | null {
   return { table: tableName, pkColumnNames, inlineFks };
 }
 
-export function parse(rawText: string): DdlParseResult {
+// existingTableNames covers tables already in the app (from an earlier
+// import or created by hand) that aren't (re)defined in this DDL text - so
+// an ALTER TABLE ... ADD (...) referencing one of them (as the table being
+// altered, or as a FOREIGN KEY's REFERENCES target) is still valid, not an
+// unknown-table warning.
+export function parse(rawText: string, existingTableNames: string[] = []): DdlParseResult {
   const warnings: string[] = [];
   const text = stripComments(rawText || '');
   const statements = splitStatements(text);
+  const knownNames = new Set(existingTableNames.map((n) => n.toUpperCase()));
 
   const tables: DdlTable[] = [];
   const fkCandidates: DdlFkCandidate[] = [];
+  const pkUpdates: DdlPkUpdate[] = [];
 
   statements.forEach((stmt) => {
     if (/^CREATE\s+TABLE\b/i.test(stmt)) {
@@ -259,6 +266,8 @@ export function parse(rawText: string): DdlParseResult {
             const col = t.columns.find((c) => c.name.toUpperCase() === pkName);
             if (col) { col.pk = true; col.nullable = false; }
           });
+        } else if (res.pkColumnNames.length) {
+          pkUpdates.push({ table: res.table, columns: res.pkColumnNames });
         }
         fkCandidates.push(...res.inlineFks);
       } else {
@@ -281,7 +290,9 @@ export function parse(rawText: string): DdlParseResult {
     if (!fk.columns.length || !fk.refColumns.length) continue;
     const srcTable = tables.find((t) => t.name.toUpperCase() === fk.table.toUpperCase());
     const dstTable = tables.find((t) => t.name.toUpperCase() === fk.refTable.toUpperCase());
-    if (!srcTable || !dstTable) {
+    const srcKnown = !!srcTable || knownNames.has(fk.table.toUpperCase());
+    const dstKnown = !!dstTable || knownNames.has(fk.refTable.toUpperCase());
+    if (!srcKnown || !dstKnown) {
       warnings.push('Skipped FK referencing unknown table: ' + fk.table + ' -> ' + fk.refTable);
       continue;
     }
@@ -290,19 +301,21 @@ export function parse(rawText: string): DdlParseResult {
       continue;
     }
 
-    fk.columns.forEach((colName) => {
-      const srcCol = srcTable.columns.find((c) => c.name.toUpperCase() === colName.toUpperCase());
-      if (srcCol) srcCol.fk = true;
-    });
+    if (srcTable) {
+      fk.columns.forEach((colName) => {
+        const srcCol = srcTable.columns.find((c) => c.name.toUpperCase() === colName.toUpperCase());
+        if (srcCol) srcCol.fk = true;
+      });
+    }
 
     relations.push({
-      sourceTable: srcTable.name,
+      sourceTable: srcTable ? srcTable.name : fk.table,
       sourceColumns: fk.columns,
-      targetTable: dstTable.name,
+      targetTable: dstTable ? dstTable.name : fk.refTable,
       targetColumns: fk.refColumns,
       name: ''
     });
   }
 
-  return { tables, relations, warnings };
+  return { tables, relations, pkUpdates, warnings };
 }

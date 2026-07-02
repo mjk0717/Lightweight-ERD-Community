@@ -130,9 +130,20 @@ export interface DdlRelation {
   name: string;
 }
 
+// A PRIMARY KEY named for a table by an ALTER TABLE ... ADD (...) statement
+// where that table isn't (re)defined in the same DDL text - so there's no
+// local DdlTable/Column to mark pk on directly. Applied against whichever
+// entity the table name resolves to (new or already existing) once import
+// has real Column objects to work with.
+export interface DdlPkUpdate {
+  table: string;
+  columns: string[];
+}
+
 export interface DdlParseResult {
   tables: DdlTable[];
   relations: DdlRelation[];
+  pkUpdates: DdlPkUpdate[];
   warnings: string[];
 }
 

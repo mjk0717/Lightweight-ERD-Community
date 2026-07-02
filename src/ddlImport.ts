@@ -33,6 +33,16 @@ function importParsedResult(result: DdlParseResult): ImportSummary {
     }
   });
 
+  result.pkUpdates.forEach((upd) => {
+    const entityId = nameToEntityId[upd.table.toUpperCase()];
+    if (!entityId) return;
+    const entity = state.getEntity(entityId)!;
+    upd.columns.forEach((colName) => {
+      const col = entity.columns.find((c) => c.name.toUpperCase() === colName.toUpperCase());
+      if (col) { col.pk = true; col.nullable = false; }
+    });
+  });
+
   let created = 0;
   result.relations.forEach((rel) => {
     const sourceId = nameToEntityId[rel.sourceTable.toUpperCase()];
@@ -50,6 +60,11 @@ function importParsedResult(result: DdlParseResult): ImportSummary {
     }
     if (!columnPairs.length) return;
     if (state.relationExistsWithPairs(columnPairs)) return;
+    // Freshly-parsed source tables already have fk:true set by the parser
+    // (it mutates its own local Column objects) - for a source table that
+    // already existed in the app (see parse()'s existingTableNames), there
+    // was no local column to mark, so it's set here instead.
+    columnPairs.forEach((p) => { const c = sourceEntity.columns.find((c) => c.id === p.sourceColumnId); if (c) c.fk = true; });
 
     state.addRelation({
       id: nextId('rel'), name: rel.name || '', logicalName: '',
@@ -88,8 +103,8 @@ function open(): void {
     actions: [
       { label: 'Close', onClick: () => modal.close() },
       { label: 'Parse & import', variant: 'primary', onClick: () => {
-        const result = parse(textarea.value);
-        if (!result.tables.length) {
+        const result = parse(textarea.value, state.data.entities.map((e) => e.name));
+        if (!result.tables.length && !result.relations.length && !result.pkUpdates.length) {
           warningsEl.innerHTML = '<div class="warn-line">No CREATE TABLE statements were recognized.</div>';
           return;
         }
