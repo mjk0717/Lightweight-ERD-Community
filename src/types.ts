@@ -38,6 +38,12 @@ export interface Relation {
   columnPairs: RelationColumnPair[];
   sourceCardinality: Cardinality;
   targetCardinality: Cardinality;
+  // Purely visual: where along the entity's own edge the line attaches,
+  // as a 0-1 fraction of its height. Undefined falls back to the default
+  // (the first column pair's row center) - dragging an endpoint handle only
+  // ever sets this, never changes which entity/column the relation targets.
+  sourceAnchorT?: number;
+  targetAnchorT?: number;
 }
 
 export interface SystemColumnDef {

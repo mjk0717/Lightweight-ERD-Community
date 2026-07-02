@@ -5,7 +5,6 @@ import { entityRenderer } from './entityRenderer';
 import { modalRelation } from './modalRelation';
 import { contextMenu } from './contextMenu';
 import { viewport } from './viewport';
-import { relationInteraction } from './relationInteraction';
 import { sourceCardinalityOf, targetCardinalityOf } from './cardinality';
 import { Box, Cardinality, Point, Relation } from './types';
 
@@ -43,6 +42,13 @@ function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, is
   const aPt = { x: aSide === 'right' ? aBox.x + aBox.w : aBox.x, y: aRowY };
   const bPt = { x: bSide === 'right' ? bBox.x + bBox.w : bBox.x, y: bRowY };
   return { aPt, bPt, aSide, bSide };
+}
+
+// Resolves an endpoint's Y position: the anchor-fraction override if one is
+// set (dragged there by the user), otherwise the default row-center Y.
+function anchorY(box: Box, defaultRowY: number, t: number | undefined): number {
+  if (t === undefined) return defaultRowY;
+  return box.y + box.h * t;
 }
 
 function bezierPointAt(p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point {
@@ -230,7 +236,9 @@ function updateRelationNode(node: SVGGElement, relation: Relation): void {
   const bRow = entityRenderer.getColumnRowCenter(relation.targetEntityId, firstPair.targetColumnId);
   if (!aRow || !bRow) { node.style.display = 'none'; return; }
 
-  const geom = computeEndpoints(aBox, aRow.y, bBox, bRow.y, relation.sourceEntityId === relation.targetEntityId);
+  const aRowY = anchorY(aBox, aRow.y, relation.sourceAnchorT);
+  const bRowY = anchorY(bBox, bRow.y, relation.targetAnchorT);
+  const geom = computeEndpoints(aBox, aRowY, bBox, bRowY, relation.sourceEntityId === relation.targetEntityId);
   const path = linePath(geom.aPt, geom.aSide, geom.bPt, geom.bSide);
 
   const selected = state.data.selected;
@@ -340,6 +348,11 @@ function clearTempLine(): void {
 // Dragging an endpoint handle re-points that end of an already-created
 // relation to a different entity, rather than only being settable when the
 // relation is first drawn.
+// Purely a visual adjustment - lets an endpoint be repositioned anywhere
+// along its own entity's edge (clamped to the entity's height), without
+// touching which entity/column the relation actually connects. The entity
+// and column stay exactly what they were; only sourceAnchorT/targetAnchorT
+// (a 0-1 fraction of the entity's height) changes.
 function onHandleMouseDown(e: MouseEvent): void {
   const handle = closest(e.target as HTMLElement, (n) => n.classList && n.classList.contains('relation-handle'));
   if (!handle) return;
@@ -349,25 +362,31 @@ function onHandleMouseDown(e: MouseEvent): void {
   const g = closest(handle, (n) => n.classList && n.classList.contains('relation'))!;
   const relationId = g.dataset.relationId!;
   const end = handle.dataset.end as 'source' | 'target';
+  const relation = state.getRelation(relationId);
+  if (!relation) return;
+  const entityId = end === 'source' ? relation.sourceEntityId : relation.targetEntityId;
+  const box = entityRenderer.getEntityBox(entityId);
+  if (!box) return;
+
   const otherHandle = g.querySelector('.relation-handle[data-end="' + (end === 'source' ? 'target' : 'source') + '"]') as SVGCircleElement | null;
   if (!otherHandle) return;
   const fixedPt = { x: Number(otherHandle.getAttribute('cx')), y: Number(otherHandle.getAttribute('cy')) };
+  const draggedX = Number(handle.getAttribute('cx'));
+
+  let lastT: number | undefined;
 
   function onMove(ev: MouseEvent): void {
-    setTempLine(fixedPt, viewport.screenToWorld(ev.clientX, ev.clientY));
+    const world = viewport.screenToWorld(ev.clientX, ev.clientY);
+    const clampedY = Math.min(Math.max(world.y, box!.y), box!.y + box!.h);
+    lastT = (clampedY - box!.y) / box!.h;
+    setTempLine(fixedPt, { x: draggedX, y: clampedY });
   }
-  function onUp(ev: MouseEvent): void {
+  function onUp(): void {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     clearTempLine();
-    const dropEl = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
-    const entityNode = dropEl && closest(dropEl, (el) => el.classList && el.classList.contains('entity'));
-    if (!entityNode) return;
-    // Dropping on a specific column row re-points to that exact column,
-    // even within the same entity - not just to a different entity.
-    const rowNode = dropEl && closest(dropEl, (el) => el.classList && el.classList.contains('entity-row'));
-    const explicitColumnId = rowNode ? rowNode.dataset.colId : undefined;
-    relationInteraction.retargetEnd(relationId, end, entityNode.dataset.entityId!, explicitColumnId);
+    if (lastT === undefined) return;
+    state.updateRelation(relationId, end === 'source' ? { sourceAnchorT: lastT } : { targetAnchorT: lastT });
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);

@@ -7,7 +7,7 @@ import { modalRelation } from './modalRelation';
 import { modalEntity } from './modalEntity';
 import { modal } from './modal';
 import { theme } from './theme';
-import { Cardinality, Column, Entity, FkPlan, Relation, RelationColumnPair } from './types';
+import { Cardinality, Column, FkPlan, Relation, RelationColumnPair } from './types';
 import { DEFAULT_SOURCE_CARDINALITY, DEFAULT_TARGET_CARDINALITY } from './cardinality';
 
 const DRAG_THRESHOLD = 4;
@@ -147,78 +147,6 @@ function remove(relationId: string): void {
   });
 }
 
-// A relation's key columns, for re-pointing an end to a freshly dropped
-// entity: its PK (composite or single), falling back to its first column.
-function defaultKeyColumns(entity: Entity): Column[] {
-  const pks = entity.columns.filter((c) => c.pk);
-  if (pks.length) return pks;
-  return entity.columns[0] ? [entity.columns[0]] : [];
-}
-
-function unmarkFkIfUnused(entityId: string, colIds: string[], excludeRelationId: string): void {
-  colIds.forEach((colId) => {
-    const stillUsed = state.data.relations.some((r) => r.id !== excludeRelationId && r.columnPairs.some((p) => p.sourceColumnId === colId));
-    if (!stillUsed) state.updateColumn(entityId, colId, { fk: false });
-  });
-}
-
-// Re-points one end of an already-created relation to a different entity,
-// dragged directly on the canvas rather than through the create-relation
-// modal. Retargeting the parent (target) end picks the new entity's PK (or
-// first column); retargeting the child (source) end finds-or-creates FK
-// column(s) on the new entity for the existing target column(s), then
-// un-flags the old entity's columns if nothing else still uses them.
-// explicitColumnId is set when the drag was dropped on a specific column
-// row (rather than just somewhere on the entity) - lets the endpoint be
-// re-pointed to a different column on the SAME entity too, not only to a
-// different entity. Dropping on a specific row always collapses the
-// relation to that single column pair, even if it was previously composite
-// - there's no way to express "re-map all N pairs" through one drop point.
-function retargetEnd(relationId: string, end: 'source' | 'target', newEntityId: string, explicitColumnId?: string): void {
-  const relation = state.getRelation(relationId);
-  if (!relation) return;
-  const newEntity = state.getEntity(newEntityId);
-  if (!newEntity) return;
-
-  if (end === 'target') {
-    const newTargetCols: Column[] = explicitColumnId
-      ? [newEntity.columns.find((c) => c.id === explicitColumnId)].filter((c): c is Column => !!c)
-      : defaultKeyColumns(newEntity);
-    if (!newTargetCols.length) { window.alert(newEntity.name + ' has no columns to reference.'); return; }
-
-    const oldSourceColIds = relation.columnPairs.map((p) => p.sourceColumnId);
-    const newPairs: RelationColumnPair[] = newTargetCols.map((tCol) => ({
-      sourceColumnId: findOrCreateFkColumn(relation.sourceEntityId, tCol, newEntity.name),
-      targetColumnId: tCol.id
-    }));
-    if (state.relationExistsWithPairs(newPairs)) return;
-    state.updateRelation(relationId, { targetEntityId: newEntityId, columnPairs: newPairs });
-    unmarkFkIfUnused(relation.sourceEntityId, oldSourceColIds, relationId);
-  } else {
-    const targetEntity = state.getEntity(relation.targetEntityId);
-    if (!targetEntity) return;
-
-    const oldSourceEntityId = relation.sourceEntityId;
-    const oldSourceColIds = relation.columnPairs.map((p) => p.sourceColumnId);
-    let newPairs: RelationColumnPair[];
-    if (explicitColumnId) {
-      const explicitCol = newEntity.columns.find((c) => c.id === explicitColumnId);
-      const tCol = state.getColumn(relation.targetEntityId, relation.columnPairs[0].targetColumnId);
-      if (!explicitCol || !tCol) return;
-      state.updateColumn(newEntityId, explicitColumnId, { fk: true });
-      newPairs = [{ sourceColumnId: explicitColumnId, targetColumnId: tCol.id }];
-    } else {
-      newPairs = relation.columnPairs.map((p) => {
-        const tCol = state.getColumn(relation.targetEntityId, p.targetColumnId)!;
-        return { sourceColumnId: findOrCreateFkColumn(newEntityId, tCol, targetEntity.name), targetColumnId: p.targetColumnId };
-      });
-    }
-    if (state.relationExistsWithPairs(newPairs)) return;
-    state.updateRelation(relationId, { sourceEntityId: newEntityId, columnPairs: newPairs });
-    unmarkFkIfUnused(oldSourceEntityId, oldSourceColIds, relationId);
-  }
-}
-
 // Starting a relation drag no longer requires grabbing a specific column
 // row - anywhere on the entity's body works. The row nearest the pointer is
 // only used as a visual anchor for the temp line; which column(s) actually
@@ -280,4 +208,4 @@ function start(entityId: string, startEvent: MouseEvent): void {
   document.addEventListener('mouseup', onUp);
 }
 
-export const relationInteraction = { start, commit, planFkColumn, remove, retargetEnd };
+export const relationInteraction = { start, commit, planFkColumn, remove };

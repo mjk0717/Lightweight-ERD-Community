@@ -142,7 +142,9 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
   const bRow = entityRenderer.getColumnRowCenter(relation.targetEntityId, firstPair.targetColumnId);
   if (!aRow || !bRow) return;
 
-  const geom = computeEndpoints(aBox, aRow.y, bBox, bRow.y, relation.sourceEntityId === relation.targetEntityId);
+  const aRowY = relation.sourceAnchorT === undefined ? aRow.y : aBox.y + aBox.h * relation.sourceAnchorT;
+  const bRowY = relation.targetAnchorT === undefined ? bRow.y : bBox.y + bBox.h * relation.targetAnchorT;
+  const geom = computeEndpoints(aBox, aRowY, bBox, bRowY, relation.sourceEntityId === relation.targetEntityId);
   const markerA = markerAnchor(geom.aPt, geom.aSide);
   const markerB = markerAnchor(geom.bPt, geom.bSide);
   const dx = Math.max(Math.abs(markerB.x - markerA.x) * 0.5, 50);
