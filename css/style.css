@@ -191,13 +191,20 @@ body { display: flex; flex-direction: column; }
 .color-swatch-reset { background: #fff; border: 1px solid #cbd5e1; color: #94a3b8; font-size: 11px; line-height: 18px; }
 .color-swatch-reset.selected { border-color: #1e293b; }
 
-.col-grid { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
-.col-grid th { text-align: left; font-size: 11px; color: #64748b; padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
-.col-grid td { padding: 3px 4px; vertical-align: middle; }
-.col-grid input[type="text"] { width: 100%; margin: 0; padding: 4px 6px; font-size: 12px; }
+/* Excel-like: gridlines come from the cell borders, not from each input
+   looking like its own little boxed textbox - inputs sit flush and
+   transparent inside their cell, exactly like a spreadsheet. */
+.col-grid { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; border: 1px solid #cbd5e1; }
+.col-grid th { text-align: left; font-size: 11px; color: #64748b; padding: 4px 6px; background: #f8fafc; border: 1px solid #cbd5e1; }
+.col-grid td { padding: 0; vertical-align: middle; border: 1px solid #e2e8f0; }
+.col-grid input[type="text"] {
+  width: 100%; display: block; margin: 0; padding: 4px 6px; font-size: 12px;
+  border: none; border-radius: 0; background: transparent; outline: none;
+}
+.col-grid input[type="text"]:focus { outline: 2px solid #2563eb; outline-offset: -2px; background: #fff; }
 .col-grid input[type="text"].cell-selected { background: #dbeafe; outline: 1px solid #2563eb; outline-offset: -1px; }
 .col-grid .col-handle-cell { width: 18px; text-align: center; }
-.col-grid .col-order { width: 22px; color: #94a3b8; font-size: 11px; }
+.col-grid .col-order { width: 22px; color: #94a3b8; font-size: 11px; text-align: center; }
 .col-grid .col-check { width: 32px; text-align: center; }
 .col-row.dragging { opacity: 0.4; }
 .col-row.col-row-system { background: #fffdf0; }
