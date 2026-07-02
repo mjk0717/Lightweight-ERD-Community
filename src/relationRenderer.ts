@@ -69,6 +69,17 @@ function markerAnchor(edge: Point, side: 'left' | 'right'): Point {
   return { x: edge.x + dir * MARKER_CLEARANCE, y: edge.y };
 }
 
+// Endpoint drag handles sit a few px off the entity edge, in the empty
+// canvas gap, rather than exactly on it - the entity div overlaps that
+// pixel and renders on top of the SVG, so a handle drawn right at the edge
+// is partly (or, for a left-attached edge, entirely) unclickable underneath
+// the entity's own hit area.
+const HANDLE_OFFSET = 9;
+function handleAnchor(edge: Point, side: 'left' | 'right'): Point {
+  const dir = side === 'right' ? 1 : -1;
+  return { x: edge.x + dir * HANDLE_OFFSET, y: edge.y };
+}
+
 function bezierPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'left' | 'right') {
   const markerA = markerAnchor(aPt, aSide);
   const markerB = markerAnchor(bPt, bSide);
@@ -254,12 +265,14 @@ function updateRelationNode(node: SVGGElement, relation: Relation): void {
   const handles = node.querySelector('.relation-handles') as SVGGElement;
   handles.innerHTML = '';
   if (isSelected) {
+    const sourceHandlePt = handleAnchor(geom.aPt, geom.aSide);
+    const targetHandlePt = handleAnchor(geom.bPt, geom.bSide);
     handles.appendChild(el('circle', {
-      class: 'relation-handle', 'data-end': 'source', cx: geom.aPt.x, cy: geom.aPt.y, r: 6,
+      class: 'relation-handle', 'data-end': 'source', cx: sourceHandlePt.x, cy: sourceHandlePt.y, r: 6,
       fill: theme.colors.relationStrokeHover, stroke: '#ffffff', 'stroke-width': 2
     }));
     handles.appendChild(el('circle', {
-      class: 'relation-handle', 'data-end': 'target', cx: geom.bPt.x, cy: geom.bPt.y, r: 6,
+      class: 'relation-handle', 'data-end': 'target', cx: targetHandlePt.x, cy: targetHandlePt.y, r: 6,
       fill: theme.colors.relationStrokeHover, stroke: '#ffffff', 'stroke-width': 2
     }));
   }
