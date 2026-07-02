@@ -4,7 +4,8 @@ import { closest } from './util';
 import { entityRenderer } from './entityRenderer';
 import { modalRelation } from './modalRelation';
 import { contextMenu } from './contextMenu';
-import { Box, Point, Relation } from './types';
+import { sourceCardinalityOf, targetCardinalityOf } from './cardinality';
+import { Box, Cardinality, Point, Relation } from './types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let svgEl: SVGSVGElement;
@@ -30,9 +31,9 @@ interface Endpoints {
 // so the curve loops out and back around instead of cutting through the box.
 function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, isSelf: boolean): Endpoints {
   if (isSelf) {
-    const aPt = { x: aBox.x + aBox.w, y: aRowY };
-    const bPt = { x: bBox.x + bBox.w, y: bRowY };
-    return { aPt, bPt, aSide: 'right', bSide: 'right' };
+    const aPt = { x: aBox.x, y: aRowY };
+    const bPt = { x: bBox.x, y: bRowY };
+    return { aPt, bPt, aSide: 'left', bSide: 'left' };
   }
   const aCenterX = aBox.x + aBox.w / 2, bCenterX = bBox.x + bBox.w / 2;
   let aSide: 'left' | 'right', bSide: 'left' | 'right';
@@ -61,26 +62,102 @@ function bezierPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'lef
   };
 }
 
+// Right-angle "elbow" routing: out horizontally from A, one vertical
+// segment, then horizontally into B. Works for the self-relation case too,
+// where both sides are equal and the elbow becomes a simple rectangular loop.
+function angularPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'left' | 'right') {
+  const dx = Math.max(Math.abs(bPt.x - aPt.x) * 0.5, 50);
+  const midAx = aPt.x + (aSide === 'right' ? dx : -dx);
+  const midBx = bPt.x + (bSide === 'right' ? dx : -dx);
+  const midX = (midAx + midBx) / 2;
+  return {
+    d: 'M ' + aPt.x + ' ' + aPt.y + ' L ' + midX + ' ' + aPt.y + ' L ' + midX + ' ' + bPt.y + ' L ' + bPt.x + ' ' + bPt.y,
+    mid: { x: midX, y: (aPt.y + bPt.y) / 2 }
+  };
+}
+
+function linePath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'left' | 'right') {
+  return state.data.lineStyle === 'angular' ? angularPath(aPt, aSide, bPt, bSide) : bezierPath(aPt, aSide, bPt, bSide);
+}
+
+// Identifying relationship: the FK column also serves as (part of) the
+// child's own primary key - drawn solid. Non-identifying (a plain
+// attribute FK) is drawn dashed. This is derived straight from the column's
+// current pk flag rather than stored separately, so toggling PK on that
+// column in the table details modal is enough to change the line style.
+function isIdentifying(relation: Relation): boolean {
+  const col = state.getColumn(relation.sourceEntityId, relation.sourceColumnId);
+  return !!col && col.pk;
+}
+
+// Same physical/logical convention as entity and column names: logical mode
+// prefers the business-friendly relation name, falling back to the
+// physical (constraint-style) name when no logical name is set.
+function displayRelationName(relation: Relation): string {
+  if (state.data.designMode === 'logical' && relation.logicalName) return relation.logicalName;
+  return relation.name;
+}
+
 function crowFoot(point: Point, side: 'left' | 'right'): SVGGElement {
+  // Prongs splay out right at the entity edge and converge to a single
+  // point further along the line - like a foot planted against the box.
   const dir = side === 'right' ? 1 : -1;
-  const back = { x: point.x + dir * 12, y: point.y };
+  const forward = { x: point.x + dir * 12, y: point.y };
   const g = el('g', { class: 'crowfoot' });
   [-6, 6].forEach((off) => {
     g.appendChild(el('line', {
-      x1: back.x, y1: back.y + off, x2: point.x, y2: point.y,
+      x1: point.x, y1: point.y + off, x2: forward.x, y2: forward.y,
       stroke: theme.colors.relationStroke, 'stroke-width': 1.5
     }));
   });
   return g;
 }
 
-function oneTick(point: Point, side: 'left' | 'right'): SVGLineElement {
+function bar(point: Point, side: 'left' | 'right', distance: number): SVGLineElement {
   const dir = side === 'right' ? 1 : -1;
-  const back = { x: point.x + dir * 9, y: point.y };
+  const x = point.x + dir * distance;
   return el('line', {
-    x1: back.x, y1: back.y - 6, x2: back.x, y2: back.y + 6,
+    x1: x, y1: point.y - 6, x2: x, y2: point.y + 6,
     stroke: theme.colors.relationStroke, 'stroke-width': 1.5
   });
+}
+
+function circle(point: Point, side: 'left' | 'right', distance: number): SVGCircleElement {
+  const dir = side === 'right' ? 1 : -1;
+  return el('circle', {
+    cx: point.x + dir * distance, cy: point.y, r: 4,
+    fill: theme.colors.bodyBg, stroke: theme.colors.relationStroke, 'stroke-width': 1.5
+  });
+}
+
+// Crow's foot notation with optionality: the crow's foot (or bars) sit right
+// at the entity edge; an outer bar/circle further along the line marks
+// mandatory/optional. "many" alone (no outer mark) is also a valid choice.
+function cardinalityMarker(point: Point, side: 'left' | 'right', cardinality: Cardinality): SVGGElement {
+  const g = el('g', { class: 'cardinality-marker' });
+  switch (cardinality) {
+    case 'one':
+      g.appendChild(bar(point, side, 9));
+      g.appendChild(bar(point, side, 15));
+      break;
+    case 'zero-or-one':
+      g.appendChild(bar(point, side, 9));
+      g.appendChild(circle(point, side, 17));
+      break;
+    case 'zero-or-many':
+      g.appendChild(crowFoot(point, side));
+      g.appendChild(circle(point, side, 20));
+      break;
+    case 'one-or-many':
+      g.appendChild(crowFoot(point, side));
+      g.appendChild(bar(point, side, 16));
+      break;
+    case 'many':
+    default:
+      g.appendChild(crowFoot(point, side));
+      break;
+  }
+  return g;
 }
 
 function buildRelationNode(relation: Relation): SVGGElement {
@@ -105,7 +182,7 @@ function updateRelationNode(node: SVGGElement, relation: Relation): void {
   if (!aRow || !bRow) { node.style.display = 'none'; return; }
 
   const geom = computeEndpoints(aBox, aRow.y, bBox, bRow.y, relation.sourceEntityId === relation.targetEntityId);
-  const path = bezierPath(geom.aPt, geom.aSide, geom.bPt, geom.bSide);
+  const path = linePath(geom.aPt, geom.aSide, geom.bPt, geom.bSide);
 
   const selected = state.data.selected;
   const isSelected = !!(selected && selected.type === 'relation' && selected.id === relation.id);
@@ -115,6 +192,8 @@ function updateRelationNode(node: SVGGElement, relation: Relation): void {
   line.setAttribute('fill', 'none');
   line.setAttribute('stroke', isSelected ? theme.colors.relationStrokeHover : theme.colors.relationStroke);
   line.setAttribute('stroke-width', isSelected ? '2.5' : '1.5');
+  if (isIdentifying(relation)) line.removeAttribute('stroke-dasharray');
+  else line.setAttribute('stroke-dasharray', '6,4');
 
   const hit = node.querySelector('.relation-hit') as SVGPathElement;
   hit.setAttribute('d', path.d);
@@ -124,14 +203,15 @@ function updateRelationNode(node: SVGGElement, relation: Relation): void {
 
   const endpoints = node.querySelector('.relation-endpoints') as SVGGElement;
   endpoints.innerHTML = '';
-  endpoints.appendChild(crowFoot(geom.aPt, geom.aSide));
-  endpoints.appendChild(oneTick(geom.bPt, geom.bSide));
+  endpoints.appendChild(cardinalityMarker(geom.aPt, geom.aSide, sourceCardinalityOf(relation)));
+  endpoints.appendChild(cardinalityMarker(geom.bPt, geom.bSide, targetCardinalityOf(relation)));
 
   const labelGroup = node.querySelector('.relation-label') as SVGGElement;
   const text = labelGroup.querySelector('.relation-label-text') as SVGTextElement;
   const bg = labelGroup.querySelector('.relation-label-bg') as SVGRectElement;
-  if (relation.name) {
-    text.textContent = relation.name;
+  const labelText = displayRelationName(relation);
+  if (labelText) {
+    text.textContent = labelText;
     labelGroup.style.display = '';
     text.setAttribute('x', String(path.mid.x));
     text.setAttribute('y', String(path.mid.y + 4));
@@ -176,7 +256,7 @@ function setTempLine(fromPt: Point, toPt: Point): void {
   tempGroup.innerHTML = '';
   const side = toPt.x >= fromPt.x ? 'right' : 'left';
   const otherSide = side === 'right' ? 'left' : 'right';
-  const path = bezierPath(fromPt, side, toPt, otherSide);
+  const path = linePath(fromPt, side, toPt, otherSide);
   const p = el('path', { d: path.d, fill: 'none', stroke: theme.colors.relationStrokeHover, 'stroke-width': 2, 'stroke-dasharray': '5,4' });
   tempGroup.appendChild(p);
 }
@@ -187,6 +267,12 @@ function clearTempLine(): void {
 }
 
 function onClick(e: MouseEvent): void {
+  const g = closest(e.target as HTMLElement, (n) => n.classList && n.classList.contains('relation'));
+  if (!g) return;
+  state.select('relation', g.dataset.relationId!);
+}
+
+function onDblClick(e: MouseEvent): void {
   const g = closest(e.target as HTMLElement, (n) => n.classList && n.classList.contains('relation'));
   if (!g) return;
   state.select('relation', g.dataset.relationId!);
@@ -209,6 +295,7 @@ function init(svg: SVGSVGElement): void {
   svgEl.appendChild(relGroup);
   svgEl.appendChild(tempGroup);
   svgEl.addEventListener('click', onClick as EventListener);
+  svgEl.addEventListener('dblclick', onDblClick as EventListener);
   svgEl.addEventListener('contextmenu', onContextMenu as EventListener);
   state.on('change', render);
   state.on('move', render);

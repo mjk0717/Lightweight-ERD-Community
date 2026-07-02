@@ -1,5 +1,5 @@
 {
-  "name": "erd-editor",
+  "name": "lightweight-erd",
   "version": "1.0.0",
   "description": "Offline-capable HTML ERD editor",
   "private": true,

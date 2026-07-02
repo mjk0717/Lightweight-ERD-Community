@@ -1,5 +1,5 @@
 import { nextId, debounce } from './util';
-import { AppData, Entity, Column, Relation, SystemColumnDef, SerializedState, Selection, SelectionType } from './types';
+import { AppData, Entity, Column, Relation, SystemColumnDef, SerializedState, Selection, SelectionType, DesignMode, LineStyle } from './types';
 
 type EventName = 'change' | 'move' | 'select';
 type Listener = () => void;
@@ -21,7 +21,9 @@ const data: AppData = {
   relations: [],
   systemColumns: [],
   view: { scale: 1, x: 0, y: 0 },
-  selected: null
+  selected: null,
+  designMode: 'logical',
+  lineStyle: 'curved'
 };
 
 const STORAGE_KEY = 'erd_tool_state_v1';
@@ -32,7 +34,9 @@ function persist(): void {
       entities: data.entities,
       relations: data.relations,
       systemColumns: data.systemColumns,
-      view: data.view
+      view: data.view,
+      designMode: data.designMode,
+      lineStyle: data.lineStyle
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch (e) {
@@ -55,6 +59,8 @@ function load(): boolean {
     data.relations = parsed.relations || [];
     data.systemColumns = parsed.systemColumns || [];
     data.view = parsed.view || { scale: 1, x: 0, y: 0 };
+    data.designMode = parsed.designMode || 'logical';
+    data.lineStyle = parsed.lineStyle || 'curved';
     return true;
   } catch (e) {
     return false;
@@ -66,6 +72,18 @@ function replaceAll(next: Partial<SerializedState>): void {
   data.relations = next.relations || [];
   data.systemColumns = next.systemColumns || [];
   data.view = next.view || { scale: 1, x: 0, y: 0 };
+  data.designMode = next.designMode || 'logical';
+  data.lineStyle = next.lineStyle || 'curved';
+  notify('change');
+}
+
+function setDesignMode(mode: DesignMode): void {
+  data.designMode = mode;
+  notify('change');
+}
+
+function setLineStyle(lineStyle: LineStyle): void {
+  data.lineStyle = lineStyle;
   notify('change');
 }
 
@@ -116,7 +134,11 @@ function getColumn(entityId: string, colId: string): Column | null {
 function addColumn(entityId: string, column: Column): Column | null {
   const e = getEntity(entityId);
   if (!e) return null;
-  e.columns.push(column);
+  // Regular columns (including FK columns created by connecting a relation)
+  // always land above system columns, never mixed in below them.
+  const firstSystemIdx = column.isSystem ? -1 : e.columns.findIndex((c) => c.isSystem);
+  if (firstSystemIdx === -1) e.columns.push(column);
+  else e.columns.splice(firstSystemIdx, 0, column);
   notify('change');
   return column;
 }
@@ -215,7 +237,7 @@ function clearSelection(): void {
 export const state = {
   data,
   on, off, emit: notify, load, persist, replaceAll,
-  select, clearSelection,
+  select, clearSelection, setDesignMode, setLineStyle,
   nextEntityPosition,
   addEntity, getEntity, updateEntity, removeEntity, moveEntity,
   getColumn, addColumn, updateColumn, removeColumn, reorderColumns,

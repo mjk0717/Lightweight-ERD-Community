@@ -19,13 +19,18 @@ export interface Entity {
   columns: Column[];
 }
 
+export type Cardinality = 'zero-or-one' | 'one' | 'zero-or-many' | 'many' | 'one-or-many';
+
 export interface Relation {
   id: string;
   name: string;
+  logicalName: string;
   sourceEntityId: string;
   sourceColumnId: string;
   targetEntityId: string;
   targetColumnId: string;
+  sourceCardinality: Cardinality;
+  targetCardinality: Cardinality;
 }
 
 export interface SystemColumnDef {
@@ -48,12 +53,17 @@ export interface Selection {
   id: string;
 }
 
+export type DesignMode = 'physical' | 'logical';
+export type LineStyle = 'curved' | 'angular';
+
 export interface AppData {
   entities: Entity[];
   relations: Relation[];
   systemColumns: SystemColumnDef[];
   view: ViewState;
   selected: Selection | null;
+  designMode: DesignMode;
+  lineStyle: LineStyle;
 }
 
 export interface SerializedState {
@@ -61,6 +71,8 @@ export interface SerializedState {
   relations: Relation[];
   systemColumns: SystemColumnDef[];
   view: ViewState;
+  designMode: DesignMode;
+  lineStyle: LineStyle;
 }
 
 export interface Box {

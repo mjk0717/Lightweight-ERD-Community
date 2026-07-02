@@ -8,15 +8,19 @@ import { jsonIO } from './jsonIO';
 import { viewport } from './viewport';
 import { Entity } from './types';
 
-function addTable(): void {
-  const pos = state.nextEntityPosition();
+function addTableAt(x: number, y: number): void {
   const entity: Entity = {
-    id: nextId('ent'), name: 'NEW_TABLE', comment: '', x: pos.x, y: pos.y,
+    id: nextId('ent'), name: 'NEW_TABLE', comment: '', x, y,
     columns: [{ id: nextId('col'), name: 'ID', dataType: 'NUMBER(10)', comment: '', pk: true, fk: false, nullable: false, isSystem: false, systemColId: null }]
   };
   state.applySystemColumnsToEntity(entity);
   state.addEntity(entity);
-  modalEntity.open(entity.id);
+  modalEntity.open(entity.id, { isNew: true });
+}
+
+function addTable(): void {
+  const pos = state.nextEntityPosition();
+  addTableAt(pos.x, pos.y);
 }
 
 function clearAll(): void {
@@ -31,6 +35,27 @@ function bind(id: string, handler: () => void): void {
   if (el) el.addEventListener('click', handler);
 }
 
+function initModeSwitch(): void {
+  // Label order is Logical (left) - toggle - Physical (right), so the thumb
+  // sits on whichever side matches the active mode: unchecked/left = Logical,
+  // checked/right = Physical.
+  const toggle = document.getElementById('mode-toggle') as HTMLInputElement | null;
+  if (!toggle) return;
+  const sync = () => { toggle.checked = state.data.designMode === 'physical'; };
+  sync();
+  toggle.addEventListener('change', () => state.setDesignMode(toggle.checked ? 'physical' : 'logical'));
+  state.on('change', sync);
+}
+
+function initLineStyleButton(): void {
+  const btn = document.getElementById('btn-line-style');
+  if (!btn) return;
+  const sync = () => { btn.textContent = state.data.lineStyle === 'angular' ? 'Line: Angular' : 'Line: Curved'; };
+  sync();
+  btn.addEventListener('click', () => state.setLineStyle(state.data.lineStyle === 'angular' ? 'curved' : 'angular'));
+  state.on('change', sync);
+}
+
 function init(): void {
   bind('btn-add-table', addTable);
   bind('btn-import-ddl', () => ddlImport.open());
@@ -40,6 +65,8 @@ function init(): void {
   bind('btn-system-columns', () => modalSystemColumns.open());
   bind('btn-reset-view', () => viewport.resetView());
   bind('btn-clear-all', clearAll);
+  initModeSwitch();
+  initLineStyleButton();
 }
 
-export const toolbar = { init, addTable };
+export const toolbar = { init, addTable, addTableAt };

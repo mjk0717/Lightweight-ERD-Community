@@ -1,7 +1,9 @@
 import { state } from './state';
 import { modalEntity } from './modalEntity';
 import { modalRelation } from './modalRelation';
-import { ContextMenuItem } from './types';
+import { relationInteraction } from './relationInteraction';
+import { toolbar } from './toolbar';
+import { ContextMenuItem, Point } from './types';
 
 let menuEl: HTMLElement | null = null;
 
@@ -47,15 +49,14 @@ function showForEntity(entityId: string, x: number, y: number): void {
 function showForRelation(relationId: string, x: number, y: number): void {
   show([
     { label: 'Edit relation', onClick: () => modalRelation.openEdit(relationId) },
-    { label: 'Delete relation', danger: true, onClick: () => {
-      const relation = state.getRelation(relationId);
-      if (!relation) return;
-      const colId = relation.sourceColumnId, entId = relation.sourceEntityId;
-      state.removeRelation(relationId);
-      const stillUsed = state.data.relations.some((r) => r.sourceColumnId === colId);
-      if (!stillUsed) state.updateColumn(entId, colId, { fk: false });
-    } }
+    { label: 'Delete relation', danger: true, onClick: () => relationInteraction.remove(relationId) }
   ], x, y);
 }
 
-export const contextMenu = { show, close, showForEntity, showForRelation };
+function showForCanvas(worldPos: Point, x: number, y: number): void {
+  show([
+    { label: '+ Table', onClick: () => toolbar.addTableAt(Math.round(worldPos.x), Math.round(worldPos.y)) }
+  ], x, y);
+}
+
+export const contextMenu = { show, close, showForEntity, showForRelation, showForCanvas };

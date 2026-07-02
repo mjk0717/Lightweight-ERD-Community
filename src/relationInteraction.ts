@@ -1,10 +1,15 @@
 import { state } from './state';
 import { viewport } from './viewport';
-import { nextId, closest } from './util';
+import { nextId, closest, escapeHtml } from './util';
 import { entityRenderer } from './entityRenderer';
 import { relationRenderer } from './relationRenderer';
 import { modalRelation } from './modalRelation';
-import { Column, FkPlan, Relation } from './types';
+import { modalEntity } from './modalEntity';
+import { modal } from './modal';
+import { Cardinality, Column, FkPlan, Relation } from './types';
+import { DEFAULT_SOURCE_CARDINALITY, DEFAULT_TARGET_CARDINALITY } from './cardinality';
+
+const DRAG_THRESHOLD = 4;
 
 // Decides what the FK column on the source entity should look like without
 // mutating anything, so both the commit path and the relation modal's
@@ -41,6 +46,9 @@ interface CommitOptions {
   targetEntityId: string;
   targetColumnId: string;
   name: string;
+  logicalName?: string;
+  sourceCardinality?: Cardinality;
+  targetCardinality?: Cardinality;
 }
 
 // Creates (or reuses) the FK column on the source entity based on the
@@ -55,19 +63,69 @@ function commit(opts: CommitOptions): Relation | null {
   return state.addRelation({
     id: nextId('rel'),
     name: opts.name || '',
+    logicalName: opts.logicalName || '',
     sourceEntityId: opts.sourceEntityId,
     sourceColumnId,
     targetEntityId: opts.targetEntityId,
-    targetColumnId: opts.targetColumnId
+    targetColumnId: opts.targetColumnId,
+    sourceCardinality: opts.sourceCardinality || DEFAULT_SOURCE_CARDINALITY,
+    targetCardinality: opts.targetCardinality || DEFAULT_TARGET_CARDINALITY
   });
 }
 
-function start(entityId: string, colId: string): void {
+// Removes a relation. If its FK column isn't shared with another relation,
+// asks whether to also delete that column from the child table or leave it
+// behind as a plain (non-FK) attribute.
+function remove(relationId: string): void {
+  const relation = state.getRelation(relationId);
+  if (!relation) return;
+  const colId = relation.sourceColumnId, entId = relation.sourceEntityId;
+  const stillUsedByOthers = state.data.relations.some((r) => r.id !== relationId && r.sourceColumnId === colId);
+
+  if (stillUsedByOthers) {
+    state.removeRelation(relationId);
+    return;
+  }
+
+  const col = state.getColumn(entId, colId);
+  const entity = state.getEntity(entId);
+  const body = document.createElement('div');
+  body.innerHTML = '<p>Remove this relation. What should happen to the column "' +
+    escapeHtml(col ? col.name : '') + '" on ' + escapeHtml(entity ? entity.name : '') + '?</p>';
+
+  modal.open({
+    title: 'Delete relation',
+    body,
+    actions: [
+      { label: 'Cancel', onClick: () => modal.close() },
+      { label: 'Keep column', onClick: () => {
+        state.removeRelation(relationId);
+        state.updateColumn(entId, colId, { fk: false });
+        modal.close();
+      } },
+      { label: 'Delete column', variant: 'danger', onClick: () => {
+        state.removeRelation(relationId);
+        state.removeColumn(entId, colId);
+        modal.close();
+      } }
+    ]
+  });
+}
+
+function start(entityId: string, colId: string, startEvent: MouseEvent): void {
   const box = entityRenderer.getEntityBox(entityId);
   const rowCenter = entityRenderer.getColumnRowCenter(entityId, colId);
   if (!box || !rowCenter) return;
 
+  const startClient = { x: startEvent.clientX, y: startEvent.clientY };
+  let dragging = false;
+
   function onMove(ev: MouseEvent): void {
+    if (!dragging) {
+      const dx = ev.clientX - startClient.x, dy = ev.clientY - startClient.y;
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      dragging = true;
+    }
     const mouseWorld = viewport.screenToWorld(ev.clientX, ev.clientY);
     const side = mouseWorld.x >= box!.x + box!.w / 2 ? 'right' : 'left';
     const anchor = { x: side === 'right' ? box!.x + box!.w : box!.x, y: rowCenter!.y };
@@ -78,6 +136,13 @@ function start(entityId: string, colId: string): void {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     relationRenderer.clearTempLine();
+
+    if (!dragging) {
+      // A plain click on the body (no real drag) opens the table details
+      // instead of misfiring a relation-create modal against itself.
+      modalEntity.open(entityId);
+      return;
+    }
 
     const targetEl = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
     const entityNode = targetEl && closest(targetEl, (el) => el.classList && el.classList.contains('entity'));
@@ -93,4 +158,4 @@ function start(entityId: string, colId: string): void {
   document.addEventListener('mouseup', onUp);
 }
 
-export const relationInteraction = { start, commit, planFkColumn };
+export const relationInteraction = { start, commit, planFkColumn, remove };

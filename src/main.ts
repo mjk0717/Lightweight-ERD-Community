@@ -3,7 +3,10 @@ import { viewport } from './viewport';
 import { entityRenderer } from './entityRenderer';
 import { entityDrag } from './entityDrag';
 import { relationRenderer } from './relationRenderer';
+import { relationInteraction } from './relationInteraction';
 import { toolbar } from './toolbar';
+import { contextMenu } from './contextMenu';
+import { closest } from './util';
 
 function deleteSelected(): void {
   const sel = state.data.selected;
@@ -11,12 +14,7 @@ function deleteSelected(): void {
   if (sel.type === 'entity') {
     state.removeEntity(sel.id);
   } else if (sel.type === 'relation') {
-    const relation = state.getRelation(sel.id);
-    if (!relation) return;
-    const colId = relation.sourceColumnId, entId = relation.sourceEntityId;
-    state.removeRelation(sel.id);
-    const stillUsed = state.data.relations.some((r) => r.sourceColumnId === colId);
-    if (!stillUsed) state.updateColumn(entId, colId, { fk: false });
+    relationInteraction.remove(sel.id);
   }
   state.clearSelection();
 }
@@ -30,11 +28,22 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
+function isOnEntityOrRelation(target: HTMLElement): boolean {
+  return !!closest(target, (el) => el.classList && (el.classList.contains('entity') || el.classList.contains('relation')));
+}
+
 function onCanvasBackgroundClick(e: MouseEvent): void {
-  const target = e.target as HTMLElement;
-  if (target.id === 'canvas-viewport' || target.id === 'entity-layer' || target.id === 'relation-svg') {
-    state.clearSelection();
-  }
+  if (isOnEntityOrRelation(e.target as HTMLElement)) return;
+  state.clearSelection();
+}
+
+function onCanvasBackgroundContextMenu(e: MouseEvent): void {
+  // Entity/relation right-clicks are handled by their own (closer) listeners;
+  // this only fires for genuine empty-canvas background right-clicks.
+  if (isOnEntityOrRelation(e.target as HTMLElement)) return;
+  e.preventDefault();
+  const worldPos = viewport.screenToWorld(e.clientX, e.clientY);
+  contextMenu.showForCanvas(worldPos, e.clientX, e.clientY);
 }
 
 function init(): void {
@@ -52,6 +61,7 @@ function init(): void {
   toolbar.init();
 
   viewportEl.addEventListener('click', onCanvasBackgroundClick);
+  viewportEl.addEventListener('contextmenu', onCanvasBackgroundContextMenu);
   document.addEventListener('keydown', onKeydown);
 
   const hint = document.getElementById('empty-hint')!;

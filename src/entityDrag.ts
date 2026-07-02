@@ -45,7 +45,7 @@ function onMouseDown(e: MouseEvent): void {
   if (row) {
     e.stopPropagation();
     state.select('entity', row.dataset.entityId!);
-    relationInteraction.start(row.dataset.entityId!, row.dataset.colId!);
+    relationInteraction.start(row.dataset.entityId!, row.dataset.colId!, e);
   }
 }
 
@@ -56,6 +56,12 @@ function onDblClick(e: MouseEvent): void {
 }
 
 function onContextMenu(e: MouseEvent): void {
+  // entity-layer no longer intercepts clicks over empty canvas (see
+  // #entity-layer { pointer-events: none } in style.css, needed so relation
+  // lines underneath stay clickable) - so this only ever fires for a genuine
+  // .entity hit now. The empty-canvas "+ Table" menu lives on the viewport
+  // itself (main.ts), which still receives everything that isn't an entity
+  // or relation.
   const entityNode = closest(e.target as HTMLElement, (el) => el.classList && el.classList.contains('entity'));
   if (!entityNode) return;
   e.preventDefault();

@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Offline ERD Editor</title>
+<title>Lightweight-ERD</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header id="toolbar">
-    <h1>ERD Editor</h1>
+    <h1>Lightweight-ERD</h1>
     <div class="toolbar-actions">
       <button id="btn-add-table" class="btn" type="button">+ Table</button>
       <button id="btn-import-ddl" class="btn" type="button">Import DDL</button>
@@ -20,6 +20,17 @@
       <span class="toolbar-sep"></span>
       <button id="btn-reset-view" class="btn" type="button">Reset view</button>
       <button id="btn-clear-all" class="btn btn-danger" type="button">Clear all</button>
+      <span class="toolbar-sep"></span>
+      <button id="btn-line-style" class="btn" type="button">Line: Curved</button>
+      <span class="toolbar-sep"></span>
+      <div class="mode-switch">
+        <span class="mode-label">Logical</span>
+        <label class="toggle">
+          <input type="checkbox" id="mode-toggle">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+        <span class="mode-label">Physical</span>
+      </div>
     </div>
   </header>
 

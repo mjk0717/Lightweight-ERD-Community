@@ -2,6 +2,7 @@ import { state } from './state';
 import { modal } from './modal';
 import { nextId, readFileAsText, escapeHtml } from './util';
 import { parse } from './ddlParser';
+import { DEFAULT_SOURCE_CARDINALITY, DEFAULT_TARGET_CARDINALITY } from './cardinality';
 import { Column, DdlParseResult, Entity } from './types';
 
 interface ImportSummary {
@@ -44,9 +45,10 @@ function importParsedResult(result: DdlParseResult): ImportSummary {
     if (!sourceCol || !targetCol) return;
     if (state.relationExists(sourceCol.id, targetCol.id)) return;
     state.addRelation({
-      id: nextId('rel'), name: rel.name || '',
+      id: nextId('rel'), name: rel.name || '', logicalName: '',
       sourceEntityId: sourceId, sourceColumnId: sourceCol.id,
-      targetEntityId: targetId, targetColumnId: targetCol.id
+      targetEntityId: targetId, targetColumnId: targetCol.id,
+      sourceCardinality: DEFAULT_SOURCE_CARDINALITY, targetCardinality: DEFAULT_TARGET_CARDINALITY
     });
     created++;
   });

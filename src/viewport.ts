@@ -1,6 +1,9 @@
 import { state } from './state';
 import { clamp, closest } from './util';
+import { entityRenderer } from './entityRenderer';
 import { Point } from './types';
+
+const FIT_MARGIN = 60;
 
 // Handles panning + zooming of the canvas. The transform element gets
 // `translate(x,y) scale(scale)`, so a world point (wx,wy) maps to a point
@@ -69,9 +72,39 @@ function onPanEnd(): void {
   state.persist();
 }
 
+// Fits every entity's bounding box into the visible viewport (like "zoom to
+// fit"), rather than just resetting to scale 1 / origin. Falls back to a
+// plain reset when there's nothing on the canvas yet.
 function resetView(): void {
   const v = view();
-  v.x = 0; v.y = 0; v.scale = 1;
+  const entities = state.data.entities;
+
+  if (!entities.length) {
+    v.x = 0; v.y = 0; v.scale = 1;
+    applyTransform();
+    state.persist();
+    return;
+  }
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  entities.forEach((e) => {
+    const box = entityRenderer.getEntityBox(e.id);
+    if (!box) return;
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxX = Math.max(maxX, box.x + box.w);
+    maxY = Math.max(maxY, box.y + box.h);
+  });
+
+  const contentW = Math.max(maxX - minX, 1);
+  const contentH = Math.max(maxY - minY, 1);
+  const viewportW = viewportEl.clientWidth;
+  const viewportH = viewportEl.clientHeight;
+  const scale = clamp(Math.min((viewportW - FIT_MARGIN * 2) / contentW, (viewportH - FIT_MARGIN * 2) / contentH), 0.2, 1.5);
+
+  v.scale = scale;
+  v.x = (viewportW - contentW * scale) / 2 - minX * scale;
+  v.y = (viewportH - contentH * scale) / 2 - minY * scale;
   applyTransform();
   state.persist();
 }

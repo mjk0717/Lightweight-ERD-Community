@@ -115,25 +115,39 @@ function buildBody(entity: Entity): HTMLElement {
   addBtn.type = 'button';
   addBtn.className = 'btn btn-add-col';
   addBtn.textContent = '+ Add column';
-  addBtn.addEventListener('click', () => { draft!.columns.push(newColumn()); renderGrid(); });
+  addBtn.addEventListener('click', () => {
+    // New columns always land above system columns, never mixed in below them.
+    const firstSystemIdx = draft!.columns.findIndex((c) => c.isSystem);
+    const insertAt = firstSystemIdx === -1 ? draft!.columns.length : firstSystemIdx;
+    draft!.columns.splice(insertAt, 0, newColumn());
+    renderGrid();
+  });
   wrap.appendChild(addBtn);
 
   return wrap;
 }
 
-function open(entityId: string): void {
+function open(entityId: string, opts?: { isNew?: boolean }): void {
   const entity = state.getEntity(entityId);
   if (!entity) return;
   const body = buildBody(entity);
+  let resolved = false;
 
   modal.open({
     title: 'Table details',
     width: '720px',
     body,
+    // If this entity was just created for the modal (e.g. from "+ Table")
+    // and the user dismisses without saving (Cancel, Escape, backdrop click,
+    // the X button), undo the creation instead of leaving a stray table.
+    onClose: () => {
+      if (opts?.isNew && !resolved) state.removeEntity(entityId);
+    },
     actions: [
-      { label: 'Delete table', variant: 'danger', onClick: () => { state.removeEntity(entity.id); modal.close(); } },
+      { label: 'Delete table', variant: 'danger', onClick: () => { resolved = true; state.removeEntity(entity.id); modal.close(); } },
       { label: 'Cancel', onClick: () => { modal.close(); } },
       { label: 'Save', variant: 'primary', onClick: () => {
+        resolved = true;
         const keptIds = new Set(draft!.columns.map((c) => c.id));
         state.data.relations = state.data.relations.filter((r) => {
           const breaksSource = r.sourceEntityId === entity.id && !keptIds.has(r.sourceColumnId);

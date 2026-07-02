@@ -7,7 +7,8 @@ let fileInput: HTMLInputElement | null = null;
 function exportJson(): void {
   const data = state.data;
   const payload: SerializedState = {
-    entities: data.entities, relations: data.relations, systemColumns: data.systemColumns, view: data.view
+    entities: data.entities, relations: data.relations, systemColumns: data.systemColumns, view: data.view,
+    designMode: data.designMode, lineStyle: data.lineStyle
   };
   downloadText(JSON.stringify(payload, null, 2), 'erd-diagram.json', 'application/json');
 }

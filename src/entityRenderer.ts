@@ -35,6 +35,18 @@ function rowFlag(col: Column): string {
   return '';
 }
 
+// Logical design mode favors the business-friendly comment over the
+// technical name, falling back to the name when no comment is set.
+function displayEntityName(entity: Entity): string {
+  if (state.data.designMode === 'logical' && entity.comment) return entity.comment;
+  return entity.name;
+}
+
+function displayColumnName(col: Column): string {
+  if (state.data.designMode === 'logical' && col.comment) return col.comment;
+  return col.name;
+}
+
 function rowClass(col: Column, idx: number): string {
   const cls = ['entity-row'];
   if (col.isSystem) cls.push('row-system');
@@ -62,7 +74,7 @@ function updateEntityNode(node: HTMLElement, entity: Entity): void {
   node.style.width = theme.entityWidth + 'px';
   const header = node.querySelector('.entity-header') as HTMLElement;
   header.title = entity.name + (entity.comment ? ' - ' + entity.comment : '');
-  (header.querySelector('.entity-name') as HTMLElement).textContent = entity.name;
+  (header.querySelector('.entity-name') as HTMLElement).textContent = displayEntityName(entity);
 
   const body = node.querySelector('.entity-body') as HTMLElement;
   body.innerHTML = '';
@@ -71,11 +83,13 @@ function updateEntityNode(node: HTMLElement, entity: Entity): void {
     row.className = rowClass(col, idx);
     row.dataset.colId = col.id;
     row.dataset.entityId = entity.id;
-    row.title = col.name + ' : ' + col.dataType + (col.comment ? '\n' + col.comment : '');
+    row.title = col.name + ' : ' + col.dataType + ' ' + (col.nullable ? 'NULL' : 'NOT NULL') + (col.comment ? '\n' + col.comment : '');
     row.innerHTML =
       '<span class="row-flag">' + rowFlag(col) + '</span>' +
-      '<span class="row-name">' + escapeHtml(col.name) + '</span>' +
-      '<span class="row-type">' + escapeHtml(col.dataType) + '</span>';
+      '<span class="row-name">' + escapeHtml(displayColumnName(col)) + '</span>' +
+      '<span class="row-type">' + escapeHtml(col.dataType) +
+        (col.nullable ? '' : '<span class="not-null-mark" title="NOT NULL">*</span>') +
+      '</span>';
     body.appendChild(row);
   });
 
@@ -112,4 +126,7 @@ function init(layer: HTMLElement): void {
   render();
 }
 
-export const entityRenderer = { init, render, entityHeight, getEntityBox, getColumnRowCenter };
+export const entityRenderer = {
+  init, render, entityHeight, getEntityBox, getColumnRowCenter,
+  displayName: displayEntityName, displayColumnName
+};

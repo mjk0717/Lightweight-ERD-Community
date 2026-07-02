@@ -2,7 +2,8 @@ import { state } from './state';
 import { theme } from './theme';
 import { downloadDataUrl } from './util';
 import { entityRenderer } from './entityRenderer';
-import { Box, Column, Entity, Point, Relation } from './types';
+import { sourceCardinalityOf, targetCardinalityOf } from './cardinality';
+import { Box, Cardinality, Column, Entity, Point, Relation } from './types';
 
 const MARGIN = 50;
 const PIXEL_RATIO = 2;
@@ -40,9 +41,9 @@ interface Endpoints { aPt: Point; bPt: Point; aSide: 'left' | 'right'; bSide: 'l
 
 function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, isSelf: boolean): Endpoints {
   if (isSelf) {
-    const aPt = { x: aBox.x + aBox.w, y: aRowY };
-    const bPt = { x: bBox.x + bBox.w, y: bRowY };
-    return { aPt, bPt, aSide: 'right', bSide: 'right' };
+    const aPt = { x: aBox.x, y: aRowY };
+    const bPt = { x: bBox.x, y: bRowY };
+    return { aPt, bPt, aSide: 'left', bSide: 'left' };
   }
   const aCenterX = aBox.x + aBox.w / 2, bCenterX = bBox.x + bBox.w / 2;
   let aSide: 'left' | 'right', bSide: 'left' | 'right';
@@ -50,6 +51,69 @@ function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, is
   const aPt = { x: aSide === 'right' ? aBox.x + aBox.w : aBox.x, y: aRowY };
   const bPt = { x: bSide === 'right' ? bBox.x + bBox.w : bBox.x, y: bRowY };
   return { aPt, bPt, aSide, bSide };
+}
+
+function drawCrowFoot(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right'): void {
+  // Prongs splay out right at the entity edge and converge to a single
+  // point further along the line - like a foot planted against the box.
+  const dir = side === 'right' ? 1 : -1;
+  const forward = { x: point.x + dir * 12, y: point.y };
+  [-6, 6].forEach((off) => {
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y + off);
+    ctx.lineTo(forward.x, forward.y);
+    ctx.stroke();
+  });
+}
+
+function drawBar(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right', distance: number): void {
+  const dir = side === 'right' ? 1 : -1;
+  const x = point.x + dir * distance;
+  ctx.beginPath();
+  ctx.moveTo(x, point.y - 6);
+  ctx.lineTo(x, point.y + 6);
+  ctx.stroke();
+}
+
+function drawCircle(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right', distance: number): void {
+  const dir = side === 'right' ? 1 : -1;
+  ctx.beginPath();
+  ctx.arc(point.x + dir * distance, point.y, 4, 0, Math.PI * 2);
+  ctx.fillStyle = theme.colors.bodyBg;
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawCardinalityMarker(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right', cardinality: Cardinality): void {
+  switch (cardinality) {
+    case 'one':
+      drawBar(ctx, point, side, 9);
+      drawBar(ctx, point, side, 15);
+      break;
+    case 'zero-or-one':
+      drawBar(ctx, point, side, 9);
+      drawCircle(ctx, point, side, 17);
+      break;
+    case 'zero-or-many':
+      drawCrowFoot(ctx, point, side);
+      drawCircle(ctx, point, side, 20);
+      break;
+    case 'one-or-many':
+      drawCrowFoot(ctx, point, side);
+      drawBar(ctx, point, side, 16);
+      break;
+    case 'many':
+    default:
+      drawCrowFoot(ctx, point, side);
+      break;
+  }
+}
+
+// Identifying relationship (FK column also part of the child's PK) draws
+// solid; a plain attribute FK (non-identifying) draws dashed.
+function isIdentifying(relation: Relation): boolean {
+  const col = state.getColumn(relation.sourceEntityId, relation.sourceColumnId);
+  return !!col && col.pk;
 }
 
 function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
@@ -62,43 +126,43 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
 
   const geom = computeEndpoints(aBox, aRow.y, bBox, bRow.y, relation.sourceEntityId === relation.targetEntityId);
   const dx = Math.max(Math.abs(geom.bPt.x - geom.aPt.x) * 0.5, 50);
-  const c1 = { x: geom.aPt.x + (geom.aSide === 'right' ? dx : -dx), y: geom.aPt.y };
-  const c2 = { x: geom.bPt.x + (geom.bSide === 'right' ? dx : -dx), y: geom.bPt.y };
 
   ctx.strokeStyle = theme.colors.relationStroke;
   ctx.lineWidth = 1.5;
+  ctx.setLineDash(isIdentifying(relation) ? [] : [6, 4]);
   ctx.beginPath();
   ctx.moveTo(geom.aPt.x, geom.aPt.y);
-  ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, geom.bPt.x, geom.bPt.y);
+
+  let mid: Point;
+  if (state.data.lineStyle === 'angular') {
+    const midAx = geom.aPt.x + (geom.aSide === 'right' ? dx : -dx);
+    const midBx = geom.bPt.x + (geom.bSide === 'right' ? dx : -dx);
+    const midX = (midAx + midBx) / 2;
+    ctx.lineTo(midX, geom.aPt.y);
+    ctx.lineTo(midX, geom.bPt.y);
+    ctx.lineTo(geom.bPt.x, geom.bPt.y);
+    mid = { x: midX, y: (geom.aPt.y + geom.bPt.y) / 2 };
+  } else {
+    const c1 = { x: geom.aPt.x + (geom.aSide === 'right' ? dx : -dx), y: geom.aPt.y };
+    const c2 = { x: geom.bPt.x + (geom.bSide === 'right' ? dx : -dx), y: geom.bPt.y };
+    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, geom.bPt.x, geom.bPt.y);
+    mid = bezierPointAt(geom.aPt, c1, c2, geom.bPt, 0.5);
+  }
   ctx.stroke();
+  ctx.setLineDash([]);
 
-  // crow's foot (many) at source end
-  const dirA = geom.aSide === 'right' ? 1 : -1;
-  const backA = { x: geom.aPt.x + dirA * 12, y: geom.aPt.y };
-  [-6, 6].forEach((off) => {
-    ctx.beginPath();
-    ctx.moveTo(backA.x, backA.y + off);
-    ctx.lineTo(geom.aPt.x, geom.aPt.y);
-    ctx.stroke();
-  });
+  drawCardinalityMarker(ctx, geom.aPt, geom.aSide, sourceCardinalityOf(relation));
+  drawCardinalityMarker(ctx, geom.bPt, geom.bSide, targetCardinalityOf(relation));
 
-  // one tick at target end
-  const dirB = geom.bSide === 'right' ? 1 : -1;
-  const backB = { x: geom.bPt.x + dirB * 9, y: geom.bPt.y };
-  ctx.beginPath();
-  ctx.moveTo(backB.x, backB.y - 6);
-  ctx.lineTo(backB.x, backB.y + 6);
-  ctx.stroke();
-
-  if (relation.name) {
-    const mid = bezierPointAt(geom.aPt, c1, c2, geom.bPt, 0.5);
+  const labelText = state.data.designMode === 'logical' && relation.logicalName ? relation.logicalName : relation.name;
+  if (labelText) {
     ctx.font = '11px ' + theme.fontFamily;
-    const textWidth = ctx.measureText(relation.name).width;
+    const textWidth = ctx.measureText(labelText).width;
     ctx.fillStyle = theme.colors.relationLabelBg;
     ctx.fillRect(mid.x - textWidth / 2 - 4, mid.y - 10, textWidth + 8, 16);
     ctx.fillStyle = theme.colors.text;
     ctx.textAlign = 'center';
-    ctx.fillText(relation.name, mid.x, mid.y + 2);
+    ctx.fillText(labelText, mid.x, mid.y + 2);
     ctx.textAlign = 'left';
   }
 }
@@ -110,7 +174,7 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: Entity): void {
   ctx.fillStyle = theme.colors.headerText;
   ctx.font = 'bold 13px ' + theme.fontFamily;
   ctx.textBaseline = 'middle';
-  ctx.fillText(entity.name, box.x + 8, box.y + theme.headerHeight / 2 + 1, box.w - 16);
+  ctx.fillText(entityRenderer.displayName(entity), box.x + 8, box.y + theme.headerHeight / 2 + 1, box.w - 16);
 
   entity.columns.forEach((col, idx) => {
     const rowY = box.y + theme.headerHeight + idx * theme.rowHeight;
@@ -125,12 +189,12 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: Entity): void {
     }
     ctx.font = '12px ' + theme.fontFamily;
     ctx.fillStyle = col.isSystem ? theme.colors.systemText : theme.colors.text;
-    ctx.fillText(col.name, box.x + 30, rowY + theme.rowHeight / 2 + 1, box.w - 100);
+    ctx.fillText(entityRenderer.displayColumnName(col), box.x + 30, rowY + theme.rowHeight / 2 + 1, box.w - 100);
 
     ctx.font = '11px ' + theme.fontFamily;
     ctx.fillStyle = theme.colors.subtext;
     ctx.textAlign = 'right';
-    ctx.fillText(col.dataType, box.x + box.w - 6, rowY + theme.rowHeight / 2 + 1, 90);
+    ctx.fillText(col.dataType + (col.nullable ? '' : ' *'), box.x + box.w - 6, rowY + theme.rowHeight / 2 + 1, 90);
     ctx.textAlign = 'left';
   });
 
