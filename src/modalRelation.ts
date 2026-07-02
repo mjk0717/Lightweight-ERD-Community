@@ -43,6 +43,13 @@ function existingColumnSelectHtml(entity: Entity): string {
   }).join('');
 }
 
+// A same-name column already on the child, whether it's currently a PK or a
+// plain attribute - if the parent's key column already exists by name,
+// that's the column to reuse, not a fresh auto-generated one.
+function findMatchingSourceColumn(sourceEntity: Entity, targetColumn: Column): Column | null {
+  return sourceEntity.columns.find((c) => c.name.toUpperCase() === targetColumn.name.toUpperCase()) || null;
+}
+
 function openCreate(sourceEntityId: string, targetEntityId: string): void {
   const sourceEntity = state.getEntity(sourceEntityId);
   const targetEntity = state.getEntity(targetEntityId);
@@ -108,14 +115,28 @@ function openCreate(sourceEntityId: string, targetEntityId: string): void {
       const row = document.createElement('label');
       row.innerHTML = escapeHtml(tCol.name) + ' &rarr; <select class="f-map-col" data-target-col-id="' + tCol.id + '">' +
         existingColumnSelectHtml(sourceEntity!) + '</select>';
-      row.querySelector('select')!.addEventListener('change', updatePreview);
+      const select = row.querySelector('select') as HTMLSelectElement;
+      const matched = findMatchingSourceColumn(sourceEntity!, tCol);
+      if (matched) select.value = matched.id;
+      select.addEventListener('change', updatePreview);
       mappingWrap.appendChild(row);
     });
     updatePreview();
   }
 
-  targetChecks.forEach((cb) => cb.addEventListener('change', renderMapping));
+  // If the parent's (checked) key column already exists on the child under
+  // the same name - PK or not - there's nothing to "create", so default to
+  // "Existing column(s)" and pre-match the pair instead of leaving the user
+  // on "New column(s)" looking at a column that's about to be duplicated.
+  function autoSwitchToExistingIfMatched(): void {
+    const cols = checkedTargetColumns();
+    const anyMatch = cols.some((tCol) => findMatchingSourceColumn(sourceEntity!, tCol));
+    if (anyMatch) (fkModeInputs.find((r) => r.value === 'existing') as HTMLInputElement).checked = true;
+  }
+
+  targetChecks.forEach((cb) => cb.addEventListener('change', () => { autoSwitchToExistingIfMatched(); renderMapping(); }));
   fkModeInputs.forEach((r) => r.addEventListener('change', renderMapping));
+  autoSwitchToExistingIfMatched();
   renderMapping();
 
   modal.open({

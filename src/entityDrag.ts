@@ -70,6 +70,12 @@ function onContextMenu(e: MouseEvent): void {
   const entityNode = closest(e.target as HTMLElement, (el) => el.classList && el.classList.contains('entity'));
   if (!entityNode) return;
   e.preventDefault();
+  // state.select() re-renders the entity body (innerHTML is rebuilt), which
+  // detaches e.target from the DOM if it was inside a column row. The
+  // viewport's own contextmenu listener would then walk up from that
+  // orphaned node, fail to find .entity, and clobber this menu with the
+  // empty-canvas one - stop the event here so it never gets that far.
+  e.stopPropagation();
   state.select('entity', entityNode.dataset.entityId!);
   contextMenu.showForEntity(entityNode.dataset.entityId!, e.clientX, e.clientY);
 }

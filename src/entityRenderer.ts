@@ -30,6 +30,8 @@ function getColumnRowCenter(entityId: string, colId: string): RowCenter | null {
 }
 
 function rowFlag(col: Column): string {
+  if (col.isSystem) return 'S';
+  if (col.pk && col.fk) return 'P/F';
   if (col.pk) return 'PK';
   if (col.fk) return 'FK';
   return '';

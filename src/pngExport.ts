@@ -53,6 +53,17 @@ function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, is
   return { aPt, bPt, aSide, bSide };
 }
 
+// See relationRenderer.ts's markerAnchor - mirrors the same minimum-clearance
+// logic so the PNG export matches the on-screen rendering.
+const MARKER_CLEARANCE = 28;
+
+function markerAnchor(edge: Point, side: 'left' | 'right', otherEdge: Point): Point {
+  const dir = side === 'right' ? 1 : -1;
+  const totalDist = Math.hypot(otherEdge.x - edge.x, otherEdge.y - edge.y);
+  const stub = Math.min(MARKER_CLEARANCE, totalDist / 2);
+  return { x: edge.x + dir * stub, y: edge.y };
+}
+
 function drawCrowFoot(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right'): void {
   // Prongs splay out right at the entity edge and converge to a single
   // point further along the line - like a foot planted against the box.
@@ -131,34 +142,38 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
   if (!aRow || !bRow) return;
 
   const geom = computeEndpoints(aBox, aRow.y, bBox, bRow.y, relation.sourceEntityId === relation.targetEntityId);
-  const dx = Math.max(Math.abs(geom.bPt.x - geom.aPt.x) * 0.5, 50);
+  const markerA = markerAnchor(geom.aPt, geom.aSide, geom.bPt);
+  const markerB = markerAnchor(geom.bPt, geom.bSide, geom.aPt);
+  const dx = Math.max(Math.abs(markerB.x - markerA.x) * 0.5, 50);
 
   ctx.strokeStyle = theme.colors.relationStroke;
   ctx.lineWidth = 1.5;
   ctx.setLineDash(isIdentifying(relation) ? [] : [6, 4]);
   ctx.beginPath();
   ctx.moveTo(geom.aPt.x, geom.aPt.y);
+  ctx.lineTo(markerA.x, markerA.y);
 
   let mid: Point;
   if (state.data.lineStyle === 'angular') {
-    const midAx = geom.aPt.x + (geom.aSide === 'right' ? dx : -dx);
-    const midBx = geom.bPt.x + (geom.bSide === 'right' ? dx : -dx);
+    const midAx = markerA.x + (geom.aSide === 'right' ? dx : -dx);
+    const midBx = markerB.x + (geom.bSide === 'right' ? dx : -dx);
     const midX = (midAx + midBx) / 2;
-    ctx.lineTo(midX, geom.aPt.y);
-    ctx.lineTo(midX, geom.bPt.y);
-    ctx.lineTo(geom.bPt.x, geom.bPt.y);
-    mid = { x: midX, y: (geom.aPt.y + geom.bPt.y) / 2 };
+    ctx.lineTo(midX, markerA.y);
+    ctx.lineTo(midX, markerB.y);
+    ctx.lineTo(markerB.x, markerB.y);
+    mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
   } else {
-    const c1 = { x: geom.aPt.x + (geom.aSide === 'right' ? dx : -dx), y: geom.aPt.y };
-    const c2 = { x: geom.bPt.x + (geom.bSide === 'right' ? dx : -dx), y: geom.bPt.y };
-    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, geom.bPt.x, geom.bPt.y);
-    mid = bezierPointAt(geom.aPt, c1, c2, geom.bPt, 0.5);
+    const c1 = { x: markerA.x + (geom.aSide === 'right' ? dx : -dx), y: markerA.y };
+    const c2 = { x: markerB.x + (geom.bSide === 'right' ? dx : -dx), y: markerB.y };
+    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, markerB.x, markerB.y);
+    mid = bezierPointAt(markerA, c1, c2, markerB, 0.5);
   }
+  ctx.lineTo(geom.bPt.x, geom.bPt.y);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  drawCardinalityMarker(ctx, geom.aPt, geom.aSide, sourceCardinalityOf(relation));
-  drawCardinalityMarker(ctx, geom.bPt, geom.bSide, targetCardinalityOf(relation));
+  drawCardinalityMarker(ctx, markerA, geom.aSide, sourceCardinalityOf(relation));
+  drawCardinalityMarker(ctx, markerB, geom.bSide, targetCardinalityOf(relation));
 
   const labelText = state.data.designMode === 'logical' && relation.logicalName ? relation.logicalName : relation.name;
   if (labelText) {
@@ -187,7 +202,7 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: Entity): void {
     ctx.fillStyle = rowBackground(col, idx);
     ctx.fillRect(box.x, rowY, box.w, theme.rowHeight);
 
-    const flag = col.pk ? 'PK' : (col.fk ? 'FK' : '');
+    const flag = col.isSystem ? 'S' : (col.pk && col.fk ? 'P/F' : (col.pk ? 'PK' : (col.fk ? 'FK' : '')));
     if (flag) {
       ctx.font = 'bold 10px ' + theme.fontFamily;
       ctx.fillStyle = theme.colors.subtext;

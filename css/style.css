@@ -129,7 +129,7 @@ body { display: flex; flex-direction: column; }
 .entity-row.row-alt { background: #f8fafc; }
 .entity-row.row-pk { background: #eef2ff; font-weight: 600; }
 .entity-row.row-system { background: #fff6cc; color: #7a5b00; }
-.entity-row .row-flag { width: 20px; flex: 0 0 20px; font-size: 10px; font-weight: 700; color: #64748b; }
+.entity-row .row-flag { width: 26px; flex: 0 0 26px; font-size: 9px; font-weight: 700; color: #64748b; }
 .entity-row .row-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
 .entity-row .row-type { flex: 0 0 auto; color: #64748b; font-size: 11px; margin-left: 6px; }
 .entity-row .not-null-mark { color: #b91c1c; font-weight: 700; margin-left: 2px; }
