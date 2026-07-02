@@ -170,8 +170,10 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  drawCardinalityMarker(ctx, markerA, geom.aSide, sourceCardinalityOf(relation));
-  drawCardinalityMarker(ctx, markerB, geom.bSide, targetCardinalityOf(relation));
+  // Markers sit right at the entity edge; markerA/markerB (used above for
+  // the curve's bend point) is what reserves the clearance past the marker.
+  drawCardinalityMarker(ctx, geom.aPt, geom.aSide, sourceCardinalityOf(relation));
+  drawCardinalityMarker(ctx, geom.bPt, geom.bSide, targetCardinalityOf(relation));
 
   const labelText = state.data.designMode === 'logical' && relation.logicalName ? relation.logicalName : relation.name;
   if (labelText) {

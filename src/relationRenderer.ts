@@ -52,13 +52,14 @@ function bezierPointAt(p0: Point, p1: Point, p2: Point, p3: Point, t: number): P
   };
 }
 
-// Crow's foot/one-many markers reach up to ~20px out from the entity edge.
-// When two entities sit close together, the marker at one end can run past
-// the other end's marker and the shapes collide/overlap. Always reserve a
-// fixed clearance stub at each end - regardless of how close the entities
-// are - so the marker itself never gets compressed or broken; if the boxes
-// are closer than 2x this stub, the connecting curve simply loops back on
-// itself in the middle rather than shrinking the guaranteed lead-in.
+// Crow's foot/one-many markers reach up to ~24px out from the entity edge
+// (see cardinalityMarker's distances below). The marker itself is drawn at
+// the actual entity edge (geom.aPt/bPt, see updateRelationNode) - this is
+// how far past the marker's own reach the curve's bend point sits, so the
+// line never bends back through the marker shape. Kept fixed regardless of
+// how close two entities are; if that means the two ends overshoot each
+// other, the connecting curve just loops back through the middle instead of
+// shrinking the reserved space (which would compress/break the marker).
 const MARKER_CLEARANCE = 32;
 
 function markerAnchor(edge: Point, side: 'left' | 'right'): Point {
@@ -232,10 +233,14 @@ function updateRelationNode(node: SVGGElement, relation: Relation): void {
   hit.setAttribute('stroke', 'transparent');
   hit.setAttribute('stroke-width', '12');
 
+  // Markers sit right at the entity edge; markerAnchor() (used inside
+  // linePath) is what reserves the clearance past the marker before the
+  // curve is allowed to start bending - order is edge -> marker ->
+  // MARKER_CLEARANCE -> curve -> MARKER_CLEARANCE -> marker -> edge.
   const endpoints = node.querySelector('.relation-endpoints') as SVGGElement;
   endpoints.innerHTML = '';
-  endpoints.appendChild(cardinalityMarker(markerAnchor(geom.aPt, geom.aSide), geom.aSide, sourceCardinalityOf(relation)));
-  endpoints.appendChild(cardinalityMarker(markerAnchor(geom.bPt, geom.bSide), geom.bSide, targetCardinalityOf(relation)));
+  endpoints.appendChild(cardinalityMarker(geom.aPt, geom.aSide, sourceCardinalityOf(relation)));
+  endpoints.appendChild(cardinalityMarker(geom.bPt, geom.bSide, targetCardinalityOf(relation)));
 
   const labelGroup = node.querySelector('.relation-label') as SVGGElement;
   const text = labelGroup.querySelector('.relation-label-text') as SVGTextElement;
