@@ -2,14 +2,17 @@ import { state } from './state';
 import { modal } from './modal';
 import { escapeHtml } from './util';
 import { relationInteraction } from './relationInteraction';
-import { CARDINALITY_OPTIONS, DEFAULT_SOURCE_CARDINALITY, DEFAULT_TARGET_CARDINALITY, sourceCardinalityOf, targetCardinalityOf } from './cardinality';
+import { CARDINALITY_GROUPS, DEFAULT_SOURCE_CARDINALITY, DEFAULT_TARGET_CARDINALITY, sourceCardinalityOf, targetCardinalityOf } from './cardinality';
 import { Cardinality, Column, Entity } from './types';
 
 function cardinalitySelectHtml(className: string, selected: Cardinality): string {
-  const options = CARDINALITY_OPTIONS.map((o) =>
-    '<option value="' + o.value + '"' + (o.value === selected ? ' selected' : '') + '>' + o.label + '</option>'
-  ).join('');
-  return '<label>Cardinality<br><select class="' + className + '">' + options + '</select></label>';
+  const groups = CARDINALITY_GROUPS.map((group) => {
+    const options = group.options.map((o) =>
+      '<option value="' + o.value + '"' + (o.value === selected ? ' selected' : '') + '>' + o.label + '</option>'
+    ).join('');
+    return '<optgroup label="' + group.label + '">' + options + '</optgroup>';
+  }).join('');
+  return '<label>Cardinality<br><select class="' + className + '">' + groups + '</select></label>';
 }
 
 // Which of the target entity's columns get pre-checked as the referenced

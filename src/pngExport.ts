@@ -104,12 +104,15 @@ function drawCardinalityMarker(ctx: CanvasRenderingContext2D, point: Point, side
       drawCircle(ctx, point, side, 17);
       break;
     case 'zero-or-many':
+      // Crow's foot converges at 12; circle (radius 4) centered at 16 so its
+      // near edge touches the foot's tip instead of floating past it.
       drawCrowFoot(ctx, point, side);
-      drawCircle(ctx, point, side, 20);
+      drawCircle(ctx, point, side, 16);
       break;
     case 'one-or-many':
+      // Bar sits right at the foot's convergence point, capping it.
       drawCrowFoot(ctx, point, side);
-      drawBar(ctx, point, side, 16);
+      drawBar(ctx, point, side, 12);
       break;
     case 'many':
     default:

@@ -1,11 +1,23 @@
 import { Cardinality } from './types';
 
-export const CARDINALITY_OPTIONS: { value: Cardinality; label: string }[] = [
-  { value: 'zero-or-one', label: 'Zero or one' },
-  { value: 'one', label: 'One' },
-  { value: 'zero-or-many', label: 'Zero or many' },
-  { value: 'many', label: 'Many' },
-  { value: 'one-or-many', label: 'One or many' }
+// Grouped for the cardinality <select> (rendered as <optgroup>s): a "One"
+// group and a "Many" group, one guide-line separator each.
+export const CARDINALITY_GROUPS: { label: string; options: { value: Cardinality; label: string }[] }[] = [
+  {
+    label: 'One',
+    options: [
+      { value: 'one', label: 'One' },
+      { value: 'zero-or-one', label: 'Zero or One' }
+    ]
+  },
+  {
+    label: 'Many',
+    options: [
+      { value: 'many', label: 'Many' },
+      { value: 'zero-or-many', label: 'Zero or Many' },
+      { value: 'one-or-many', label: 'One or Many' }
+    ]
+  }
 ];
 
 export const DEFAULT_SOURCE_CARDINALITY: Cardinality = 'one-or-many';

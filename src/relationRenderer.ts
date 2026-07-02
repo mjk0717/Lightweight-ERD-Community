@@ -173,12 +173,15 @@ function cardinalityMarker(point: Point, side: 'left' | 'right', cardinality: Ca
       g.appendChild(circle(point, side, 17));
       break;
     case 'zero-or-many':
+      // Crow's foot converges at 12; circle (radius 4) centered at 16 so its
+      // near edge touches the foot's tip instead of floating past it.
       g.appendChild(crowFoot(point, side));
-      g.appendChild(circle(point, side, 20));
+      g.appendChild(circle(point, side, 16));
       break;
     case 'one-or-many':
+      // Bar sits right at the foot's convergence point, capping it.
       g.appendChild(crowFoot(point, side));
-      g.appendChild(bar(point, side, 16));
+      g.appendChild(bar(point, side, 12));
       break;
     case 'many':
     default:
