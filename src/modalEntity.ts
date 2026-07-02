@@ -7,6 +7,48 @@ import { Column, Entity } from './types';
 let draft: Entity | null = null;
 let gridBody: HTMLElement;
 let dragIndex: number | null = null;
+let dragMoved = false;
+
+// Ctrl+Z/Ctrl+Y undo-redo across the whole editing session (name, comment,
+// header color, and every column field) - a linear history of full-draft
+// snapshots, simpler and more predictable than trying to diff/patch
+// individual field edits.
+let history: Entity[] = [];
+let historyIndex = -1;
+let refreshAll: (() => void) | null = null;
+
+function cloneEntity(e: Entity): Entity { return JSON.parse(JSON.stringify(e)); }
+
+function initHistory(): void {
+  history = [cloneEntity(draft!)];
+  historyIndex = 0;
+}
+
+function pushHistory(): void {
+  if (!draft) return;
+  history = history.slice(0, historyIndex + 1);
+  history.push(cloneEntity(draft));
+  historyIndex++;
+}
+
+function jumpHistory(index: number): void {
+  if (index < 0 || index >= history.length) return;
+  historyIndex = index;
+  draft = cloneEntity(history[index]);
+  if (refreshAll) refreshAll();
+}
+
+function undo(): void { jumpHistory(historyIndex - 1); }
+function redo(): void { jumpHistory(historyIndex + 1); }
+
+// Ctrl+Z/Ctrl+Y (or Ctrl+Shift+Z) while the modal has focus - preventDefault
+// so the browser's own per-field undo doesn't also fire and fight this.
+function onModalKeydown(e: KeyboardEvent): void {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const key = e.key.toLowerCase();
+  if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+}
 
 // Excel-like range selection/copy-paste over the grid's text columns (row
 // reordering has its own drag handle, so this only spans Name/Comment/Data
@@ -38,29 +80,44 @@ function renderRow(col: Column, idx: number): HTMLTableRowElement {
     '<td>' + (col.isSystem ? '<span class="hint">system</span>' : '<button type="button" class="btn-icon btn-del-col" title="Delete column">✕</button>') + '</td>';
 
   const nameInput = tr.querySelector('.f-name') as HTMLInputElement | null;
-  if (nameInput) nameInput.addEventListener('input', (e) => { col.name = (e.target as HTMLInputElement).value; });
+  if (nameInput) {
+    nameInput.addEventListener('input', (e) => { col.name = (e.target as HTMLInputElement).value; });
+    nameInput.addEventListener('change', pushHistory);
+  }
   const commentInput = tr.querySelector('.f-comment') as HTMLInputElement | null;
-  if (commentInput) commentInput.addEventListener('input', (e) => { col.comment = (e.target as HTMLInputElement).value; });
+  if (commentInput) {
+    commentInput.addEventListener('input', (e) => { col.comment = (e.target as HTMLInputElement).value; });
+    commentInput.addEventListener('change', pushHistory);
+  }
   const typeInput = tr.querySelector('.f-type') as HTMLInputElement | null;
-  if (typeInput) typeInput.addEventListener('input', (e) => { col.dataType = (e.target as HTMLInputElement).value; });
+  if (typeInput) {
+    typeInput.addEventListener('input', (e) => { col.dataType = (e.target as HTMLInputElement).value; });
+    typeInput.addEventListener('change', pushHistory);
+  }
 
   (tr.querySelector('.f-pk') as HTMLInputElement).addEventListener('change', (e) => {
     col.pk = (e.target as HTMLInputElement).checked;
     if (col.pk) col.nullable = false;
     renderGrid();
+    pushHistory();
   });
-  (tr.querySelector('.f-null') as HTMLInputElement).addEventListener('change', (e) => { col.nullable = (e.target as HTMLInputElement).checked; });
+  (tr.querySelector('.f-null') as HTMLInputElement).addEventListener('change', (e) => {
+    col.nullable = (e.target as HTMLInputElement).checked;
+    pushHistory();
+  });
 
   const delBtn = tr.querySelector('.btn-del-col') as HTMLButtonElement | null;
   if (delBtn) delBtn.addEventListener('click', () => {
     draft!.columns = draft!.columns.filter((c) => c.id !== col.id);
     renderGrid();
+    pushHistory();
   });
 
   const handle = tr.querySelector('.drag-handle') as HTMLElement;
   handle.addEventListener('mousedown', (e) => {
     e.preventDefault();
     dragIndex = idx;
+    dragMoved = false;
     tr.classList.add('dragging');
     document.addEventListener('mousemove', onDragMove);
     document.addEventListener('mouseup', onDragEnd);
@@ -82,6 +139,7 @@ function onDragMove(e: MouseEvent): void {
   const moved = draft.columns.splice(dragIndex, 1)[0];
   draft.columns.splice(overIndex, 0, moved);
   dragIndex = overIndex;
+  dragMoved = true;
   renderGrid();
 }
 
@@ -89,6 +147,7 @@ function onDragEnd(): void {
   dragIndex = null;
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mouseup', onDragEnd);
+  if (dragMoved) { dragMoved = false; pushHistory(); }
 }
 
 function cellInput(row: number, col: number): HTMLInputElement | null {
@@ -204,6 +263,7 @@ function onGridPaste(e: ClipboardEvent): void {
   selFocus = { row: Math.min(anchor.row + grid.length - 1, draft.columns.length - 1), col: Math.min(maxCol, CELL_FIELDS.length - 1) };
   renderGrid();
   refreshSelectionHighlight();
+  pushHistory();
 }
 
 function renderGrid(): void {
@@ -213,7 +273,9 @@ function renderGrid(): void {
 
 function buildBody(entity: Entity): HTMLElement {
   draft = JSON.parse(JSON.stringify(entity));
+  initHistory();
   const wrap = document.createElement('div');
+  wrap.addEventListener('keydown', onModalKeydown);
 
   const datalist = document.createElement('datalist');
   datalist.id = 'oracle-types-datalist';
@@ -225,8 +287,12 @@ function buildBody(entity: Entity): HTMLElement {
   head.innerHTML =
     '<label>Table name<br><input type="text" class="f-entity-name" value="' + escapeHtml(draft!.name) + '"></label>' +
     '<label>Comment<br><input type="text" class="f-entity-comment" value="' + escapeHtml(draft!.comment || '') + '"></label>';
-  (head.querySelector('.f-entity-name') as HTMLInputElement).addEventListener('input', (e) => { draft!.name = (e.target as HTMLInputElement).value; });
-  (head.querySelector('.f-entity-comment') as HTMLInputElement).addEventListener('input', (e) => { draft!.comment = (e.target as HTMLInputElement).value; });
+  const nameInput = head.querySelector('.f-entity-name') as HTMLInputElement;
+  const commentInput = head.querySelector('.f-entity-comment') as HTMLInputElement;
+  nameInput.addEventListener('input', (e) => { draft!.name = (e.target as HTMLInputElement).value; });
+  nameInput.addEventListener('change', pushHistory);
+  commentInput.addEventListener('input', (e) => { draft!.comment = (e.target as HTMLInputElement).value; });
+  commentInput.addEventListener('change', pushHistory);
   wrap.appendChild(head);
 
   const palette = document.createElement('div');
@@ -239,7 +305,7 @@ function buildBody(entity: Entity): HTMLElement {
       swatch.className = 'color-swatch' + ((draft!.headerColor || theme.colors.headerBg) === color ? ' selected' : '');
       swatch.style.background = color;
       swatch.title = color;
-      swatch.addEventListener('click', () => { draft!.headerColor = color; renderPalette(); });
+      swatch.addEventListener('click', () => { draft!.headerColor = color; renderPalette(); pushHistory(); });
       palette.appendChild(swatch);
     });
   }
@@ -270,8 +336,16 @@ function buildBody(entity: Entity): HTMLElement {
     const insertAt = firstSystemIdx === -1 ? draft!.columns.length : firstSystemIdx;
     draft!.columns.splice(insertAt, 0, newColumn());
     renderGrid();
+    pushHistory();
   });
   wrap.appendChild(addBtn);
+
+  refreshAll = () => {
+    nameInput.value = draft!.name;
+    commentInput.value = draft!.comment || '';
+    renderPalette();
+    renderGrid();
+  };
 
   return wrap;
 }
@@ -285,6 +359,9 @@ function cleanupGridListeners(): void {
   document.removeEventListener('paste', onGridPaste);
   selAnchor = null;
   selFocus = null;
+  history = [];
+  historyIndex = -1;
+  refreshAll = null;
 }
 
 function open(entityId: string): void {
