@@ -1,4 +1,5 @@
 import { state } from './state';
+import { debounce } from './util';
 import { Entity, Relation, SystemColumnDef } from './types';
 
 // App-wide undo/redo over the diagram's actual content (entities,
@@ -7,6 +8,10 @@ import { Entity, Relation, SystemColumnDef } from './types';
 // to touch. Every 'change'/'move' event schedules a debounced checkpoint;
 // rapid-fire updates (a drag, a multi-step import) settle into one step
 // instead of one per intermediate event.
+//
+// The stack is persisted to its own localStorage key (capped at
+// MAX_HISTORY full-document snapshots) so undo/redo survives a page
+// refresh - not just the current document, saved separately by state.ts.
 
 interface Snapshot {
   entities: Entity[];
@@ -14,8 +19,9 @@ interface Snapshot {
   systemColumns: SystemColumnDef[];
 }
 
-const MAX_HISTORY = 100;
+const MAX_HISTORY = 50;
 const DEBOUNCE_MS = 400;
+const HISTORY_STORAGE_KEY = 'erd_tool_history_v1';
 
 let stack: Snapshot[] = [];
 let index = -1;
@@ -30,6 +36,29 @@ function cloneSnapshot(): Snapshot {
   };
 }
 
+function persistHistory(): void {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify({ stack, index }));
+  } catch (e) {
+    // storage unavailable/full - non-fatal, undo/redo still works this session
+  }
+}
+const persistHistoryDebounced = debounce(persistHistory, DEBOUNCE_MS);
+
+function loadHistory(): boolean {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { stack: Snapshot[]; index: number };
+    if (!Array.isArray(parsed.stack) || typeof parsed.index !== 'number' || !parsed.stack.length) return false;
+    stack = parsed.stack;
+    index = Math.min(Math.max(parsed.index, 0), stack.length - 1);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function pushSnapshot(): void {
   if (suppress) return;
   const snap = cloneSnapshot();
@@ -38,6 +67,7 @@ function pushSnapshot(): void {
   stack.push(snap);
   index++;
   if (stack.length > MAX_HISTORY) { stack.shift(); index--; }
+  persistHistoryDebounced();
 }
 
 function scheduleSnapshot(): void {
@@ -55,6 +85,7 @@ function applySnapshot(snap: Snapshot): void {
   state.emit('change');
   state.emit('select');
   suppress = false;
+  persistHistoryDebounced();
 }
 
 // A pending debounced snapshot represents "in-progress" edits that haven't
@@ -93,7 +124,14 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 function init(): void {
-  pushSnapshot();
+  const loaded = loadHistory();
+  // If the restored history doesn't already end at the current on-disk
+  // document (e.g. nothing was ever saved, or state.ts's own storage and
+  // this one somehow drifted apart), add the current state as a fresh
+  // checkpoint on top - undo should never jump to something unrelated to
+  // what's actually on screen right now.
+  const current = cloneSnapshot();
+  if (!loaded || JSON.stringify(stack[index]) !== JSON.stringify(current)) pushSnapshot();
   state.on('change', scheduleSnapshot);
   state.on('move', scheduleSnapshot);
   document.addEventListener('keydown', onKeydown);
