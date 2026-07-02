@@ -239,7 +239,12 @@ function onGridCopy(e: ClipboardEvent): void {
   const active = document.activeElement;
   if (!active || !gridBody.contains(active)) return;
   const b = rangeBounds();
-  if (!b || (b.r0 === b.r1 && b.c0 === b.c1)) return;
+  if (!b) return;
+  // A single cell is still a real selection (like clicking one cell in
+  // Excel) - copy its whole value, unless the user has actually highlighted
+  // a substring within the field, in which case let the browser's normal
+  // partial-text copy win instead.
+  if (b.r0 === b.r1 && b.c0 === b.c1 && active instanceof HTMLInputElement && active.selectionStart !== active.selectionEnd) return;
   const lines: string[] = [];
   for (let r = b.r0; r <= b.r1; r++) {
     const vals: string[] = [];
@@ -261,9 +266,13 @@ function onGridPaste(e: ClipboardEvent): void {
   const rawLines = text.replace(/\r/g, '').split('\n');
   if (rawLines.length && rawLines[rawLines.length - 1] === '') rawLines.pop();
   const grid = rawLines.map((line) => line.split('\t'));
-  // A single plain value (no tabs/newlines) isn't a range paste - leave it
-  // to the browser's normal single-field paste.
-  if (grid.length <= 1 && grid[0].length <= 1) return;
+  // A single plain value (no tabs/newlines) pasted over a genuine in-field
+  // text selection (the user highlighted part of the value) keeps the
+  // browser's normal partial-text paste; otherwise - including a plain
+  // single-cell "click, then paste" with just a caret - it replaces the
+  // whole cell's value, the same as Excel does for a selected cell.
+  const isSingleValue = grid.length <= 1 && grid[0].length <= 1;
+  if (isSingleValue && active instanceof HTMLInputElement && active.selectionStart !== active.selectionEnd) return;
   e.preventDefault();
 
   let maxCol = 0;
@@ -392,7 +401,7 @@ function open(entityId: string): void {
 
   modal.open({
     title: 'Table details',
-    width: '720px',
+    width: '740px',
     body,
     onClose: cleanupGridListeners,
     actions: [
@@ -426,7 +435,7 @@ function openNew(template: Entity): void {
 
   modal.open({
     title: 'Table details',
-    width: '720px',
+    width: '740px',
     body,
     onClose: cleanupGridListeners,
     actions: [
