@@ -326,9 +326,10 @@ function open(entityId: string): void {
   });
 }
 
-// Used by "+ Table": shows the same editor for a table that doesn't exist
-// in state yet. Nothing is created until Save is clicked; Cancel/Escape/the
-// backdrop simply discard the template with no state change at all.
+// Used by "Create Entity/Table": shows the same editor for a table that
+// doesn't exist in state yet. Nothing is created until Save is clicked;
+// Cancel/Escape/the backdrop simply discard the template with no state
+// change at all.
 function openNew(template: Entity): void {
   const body = buildBody(template);
 

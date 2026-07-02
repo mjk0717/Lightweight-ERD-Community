@@ -4,7 +4,8 @@ import { modalRelation } from './modalRelation';
 import { relationInteraction } from './relationInteraction';
 import { toolbar } from './toolbar';
 import { ddlExport } from './ddlExport';
-import { ContextMenuItem, Point } from './types';
+import { HEADER_COLOR_PALETTE, theme } from './theme';
+import { ContextMenuItem, Entity, Point } from './types';
 
 let menuEl: HTMLElement | null = null;
 
@@ -19,12 +20,19 @@ function onOutsideClick(e: MouseEvent): void {
 }
 function onKeydown(e: KeyboardEvent): void { if (e.key === 'Escape') close(); }
 
-function show(items: ContextMenuItem[], x: number, y: number): void {
+// headerEl, when given, is prepended above the item buttons with a
+// separator line below it - used for the entity menu's header-color
+// palette so it's reachable without opening the full table-details modal.
+function show(items: ContextMenuItem[], x: number, y: number, headerEl?: HTMLElement): void {
   close();
   menuEl = document.createElement('div');
   menuEl.className = 'context-menu';
   menuEl.style.left = x + 'px';
   menuEl.style.top = y + 'px';
+  if (headerEl) {
+    menuEl.appendChild(headerEl);
+    menuEl.appendChild(document.createElement('div')).className = 'context-menu-sep';
+  }
   items.forEach((item) => {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -40,12 +48,51 @@ function show(items: ContextMenuItem[], x: number, y: number): void {
   }, 0);
 }
 
+// Same palette as the table-details modal (see modalEntity.ts's
+// renderPalette) - lets the header color be changed with one click,
+// directly from the right-click menu.
+function buildPaletteHeader(entity: Entity): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'header-color-palette context-menu-palette';
+  function render(): void {
+    wrap.innerHTML = '<span class="hint">Header color</span>';
+    HEADER_COLOR_PALETTE.forEach((color) => {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'color-swatch' + ((entity.headerColor || theme.colors.headerBg) === color ? ' selected' : '');
+      swatch.style.background = color;
+      swatch.title = color;
+      swatch.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.updateEntity(entity.id, { headerColor: color });
+        render();
+      });
+      wrap.appendChild(swatch);
+    });
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'color-swatch color-swatch-reset' + (!entity.headerColor ? ' selected' : '');
+    resetBtn.title = 'Default';
+    resetBtn.textContent = '✕';
+    resetBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.updateEntity(entity.id, { headerColor: null });
+      render();
+    });
+    wrap.appendChild(resetBtn);
+  }
+  render();
+  return wrap;
+}
+
 function showForEntity(entityId: string, x: number, y: number): void {
+  const entity = state.getEntity(entityId);
+  if (!entity) return;
   show([
     { label: 'Edit Table', onClick: () => modalEntity.open(entityId) },
     { label: 'Create DDL', onClick: () => ddlExport.open(entityId) },
     { label: 'Delete table', danger: true, onClick: () => state.removeEntity(entityId) }
-  ], x, y);
+  ], x, y, buildPaletteHeader(entity));
 }
 
 function showForRelation(relationId: string, x: number, y: number): void {
@@ -57,7 +104,7 @@ function showForRelation(relationId: string, x: number, y: number): void {
 
 function showForCanvas(worldPos: Point, x: number, y: number): void {
   show([
-    { label: '+ Table', onClick: () => toolbar.addTableAt(Math.round(worldPos.x), Math.round(worldPos.y)) }
+    { label: 'Create Entity/Table', onClick: () => toolbar.addTableAt(Math.round(worldPos.x), Math.round(worldPos.y)) }
   ], x, y);
 }
 

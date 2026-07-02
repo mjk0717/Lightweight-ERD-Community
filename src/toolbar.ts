@@ -18,11 +18,6 @@ function addTableAt(x: number, y: number): void {
   modalEntity.openNew(entity);
 }
 
-function addTable(): void {
-  const pos = state.nextEntityPosition();
-  addTableAt(pos.x, pos.y);
-}
-
 function clearAll(): void {
   if (!window.confirm('Remove all tables and relations? System column definitions are kept.')) return;
   state.data.entities = [];
@@ -57,7 +52,6 @@ function initLineStyleButton(): void {
 }
 
 function init(): void {
-  bind('btn-add-table', addTable);
   bind('btn-import-ddl', () => ddlImport.open());
   bind('btn-export-png', () => pngExport.exportPng());
   bind('btn-export-ddl', () => ddlExport.openBulk());
@@ -70,4 +64,4 @@ function init(): void {
   initLineStyleButton();
 }
 
-export const toolbar = { init, addTable, addTableAt };
+export const toolbar = { init, addTableAt };

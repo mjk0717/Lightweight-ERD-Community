@@ -259,3 +259,5 @@ body { display: flex; flex-direction: column; }
 .context-menu-item:hover { background: #f1f5f9; }
 .context-menu-item.danger { color: #b91c1c; }
 .context-menu-item.danger:hover { background: #fef2f2; }
+.context-menu-palette { padding: 6px 8px 8px; margin-bottom: 0; }
+.context-menu-sep { height: 1px; background: #e2e8f0; margin: 4px 2px; }
