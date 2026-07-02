@@ -41,13 +41,33 @@ function jumpHistory(index: number): void {
 function undo(): void { jumpHistory(historyIndex - 1); }
 function redo(): void { jumpHistory(historyIndex + 1); }
 
-// Ctrl+Z/Ctrl+Y (or Ctrl+Shift+Z) while the modal has focus - preventDefault
-// so the browser's own per-field undo doesn't also fire and fight this.
+// Document-level (not just the modal root) because renderGrid() rebuilds
+// row inputs from scratch - e.g. after a paste - which drops focus to
+// document.body if the previously-focused input was inside the rebuilt
+// range. A listener on the modal root would never see a keydown targeting
+// body, since body isn't a descendant of it; Ctrl+Z would then silently do
+// nothing right after any edit that rebuilds the grid.
 function onModalKeydown(e: KeyboardEvent): void {
-  if (!(e.ctrlKey || e.metaKey)) return;
-  const key = e.key.toLowerCase();
-  if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-  else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+  if (!document.contains(gridBody)) return;
+  if (e.ctrlKey || e.metaKey) {
+    const key = e.key.toLowerCase();
+    if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    return;
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && draft) {
+    const b = rangeBounds();
+    if (!b || (b.r0 === b.r1 && b.c0 === b.c1)) return; // single/no cell - let normal text editing happen
+    e.preventDefault();
+    for (let r = b.r0; r <= b.r1; r++) {
+      const col = draft.columns[r];
+      if (!col || col.isSystem) continue;
+      for (let c = b.c0; c <= b.c1; c++) (col as any)[CELL_FIELDS[c]] = '';
+    }
+    renderGrid();
+    refreshSelectionHighlight();
+    pushHistory();
+  }
 }
 
 // Excel-like range selection/copy-paste over the grid's text columns (row
@@ -275,7 +295,7 @@ function buildBody(entity: Entity): HTMLElement {
   draft = JSON.parse(JSON.stringify(entity));
   initHistory();
   const wrap = document.createElement('div');
-  wrap.addEventListener('keydown', onModalKeydown);
+  document.addEventListener('keydown', onModalKeydown);
 
   const datalist = document.createElement('datalist');
   datalist.id = 'oracle-types-datalist';
@@ -357,6 +377,7 @@ function cleanupGridListeners(): void {
   document.removeEventListener('mouseup', onGridMouseUp);
   document.removeEventListener('copy', onGridCopy);
   document.removeEventListener('paste', onGridPaste);
+  document.removeEventListener('keydown', onModalKeydown);
   selAnchor = null;
   selFocus = null;
   history = [];
