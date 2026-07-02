@@ -8,8 +8,8 @@ export const CARDINALITY_OPTIONS: { value: Cardinality; label: string }[] = [
   { value: 'one-or-many', label: 'One or many' }
 ];
 
-export const DEFAULT_SOURCE_CARDINALITY: Cardinality = 'many';
-export const DEFAULT_TARGET_CARDINALITY: Cardinality = 'one-or-many';
+export const DEFAULT_SOURCE_CARDINALITY: Cardinality = 'one-or-many';
+export const DEFAULT_TARGET_CARDINALITY: Cardinality = 'one';
 
 // Older saved relations (or relations built before this field existed) may
 // be missing the cardinality fields - fall back to the current default look.
