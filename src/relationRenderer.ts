@@ -442,10 +442,10 @@ function render(): void {
   });
 }
 
-function setTempLine(fromPt: Point, fromSide: AnchorSide, toPt: Point, toSide: AnchorSide): void {
+function setTempLine(fromPt: Point, fromSide: AnchorSide, toPt: Point, toSide: AnchorSide, isSelf: boolean = false): void {
   tempGroup.style.display = '';
   tempGroup.innerHTML = '';
-  const path = linePath(fromPt, fromSide, toPt, toSide, false);
+  const path = linePath(fromPt, fromSide, toPt, toSide, isSelf);
   const p = el('path', { d: path.d, fill: 'none', stroke: theme.colors.relationStrokeHover, 'stroke-width': 2, 'stroke-dasharray': '5,4' });
   tempGroup.appendChild(p);
 }
@@ -482,13 +482,14 @@ function onHandleMouseDown(e: MouseEvent): void {
   if (!otherHandle) return;
   const fixedPt = { x: Number(otherHandle.getAttribute('cx')), y: Number(otherHandle.getAttribute('cy')) };
   const fixedSide = otherHandle.getAttribute('data-side') as AnchorSide;
+  const isSelf = relation.sourceEntityId === relation.targetEntityId;
 
   let lastAnchor: Anchor | undefined;
 
   function onMove(ev: MouseEvent): void {
     const world = viewport.screenToWorld(ev.clientX, ev.clientY);
     lastAnchor = nearestAnchor(box!, world);
-    setTempLine(fixedPt, fixedSide, pointOnSide(box!, lastAnchor.side, lastAnchor.t), lastAnchor.side);
+    setTempLine(fixedPt, fixedSide, pointOnSide(box!, lastAnchor.side, lastAnchor.t), lastAnchor.side, isSelf);
   }
   function onUp(): void {
     document.removeEventListener('mousemove', onMove);
