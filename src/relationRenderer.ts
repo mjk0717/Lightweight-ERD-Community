@@ -6,7 +6,7 @@ import { modalRelation } from './modalRelation';
 import { contextMenu } from './contextMenu';
 import { viewport } from './viewport';
 import { sourceCardinalityOf, targetCardinalityOf } from './cardinality';
-import { Box, Cardinality, Point, Relation } from './types';
+import { Anchor, AnchorSide, Box, Cardinality, Point, Relation } from './types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let svgEl: SVGSVGElement;
@@ -22,33 +22,74 @@ function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs?: Record<string,
 interface Endpoints {
   aPt: Point;
   bPt: Point;
-  aSide: 'left' | 'right';
-  bSide: 'left' | 'right';
+  aSide: AnchorSide;
+  bSide: AnchorSide;
 }
 
-// Decide which vertical edge of each box the connector attaches to, based
-// on the relative horizontal position of the two boxes. Self-referencing
-// relations (same entity on both ends) attach both points to the same edge
-// so the curve loops out and back around instead of cutting through the box.
-function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, isSelf: boolean): Endpoints {
+// Outward-facing unit vector for a given edge - "which way the line/marker
+// points away from the box" for that side.
+function sideDir(side: AnchorSide): Point {
+  switch (side) {
+    case 'left': return { x: -1, y: 0 };
+    case 'right': return { x: 1, y: 0 };
+    case 'top': return { x: 0, y: -1 };
+    case 'bottom': return { x: 0, y: 1 };
+  }
+}
+
+// The point at fraction t (0-1) along a given edge of a box - left/right run
+// top-to-bottom, top/bottom run left-to-right.
+function pointOnSide(box: Box, side: AnchorSide, t: number): Point {
+  switch (side) {
+    case 'left': return { x: box.x, y: box.y + box.h * t };
+    case 'right': return { x: box.x + box.w, y: box.y + box.h * t };
+    case 'top': return { x: box.x + box.w * t, y: box.y };
+    case 'bottom': return { x: box.x + box.w * t, y: box.y + box.h };
+  }
+}
+
+// Finds the closest point on any of a box's four edges to an arbitrary
+// point (e.g. the cursor during an endpoint drag) - used so dragging can
+// freely cross from one edge to another, not just slide along the original one.
+function nearestAnchor(box: Box, pt: Point): Anchor {
+  const edges: { side: AnchorSide; a: Point; b: Point }[] = [
+    { side: 'left', a: { x: box.x, y: box.y }, b: { x: box.x, y: box.y + box.h } },
+    { side: 'right', a: { x: box.x + box.w, y: box.y }, b: { x: box.x + box.w, y: box.y + box.h } },
+    { side: 'top', a: { x: box.x, y: box.y }, b: { x: box.x + box.w, y: box.y } },
+    { side: 'bottom', a: { x: box.x, y: box.y + box.h }, b: { x: box.x + box.w, y: box.y + box.h } }
+  ];
+  let best: { side: AnchorSide; t: number; dist: number } | null = null;
+  edges.forEach(({ side, a, b }) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq === 0 ? 0 : ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / lenSq;
+    t = Math.min(Math.max(t, 0), 1);
+    const dist = Math.hypot(pt.x - (a.x + t * dx), pt.y - (a.y + t * dy));
+    if (!best || dist < best.dist) best = { side, t, dist };
+  });
+  return { side: best!.side, t: best!.t };
+}
+
+// Decide which edge of each box the connector attaches to. An explicit
+// anchor (dragged there by the user) always wins; otherwise falls back to
+// auto left/right based on relative horizontal position, at the given row Y.
+// Self-referencing relations (same entity on both ends) default both points
+// to the same edge so the curve loops out and back around instead of
+// cutting through the box.
+function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, isSelf: boolean, aAnchor?: Anchor, bAnchor?: Anchor): Endpoints {
   if (isSelf) {
-    const aPt = { x: aBox.x, y: aRowY };
-    const bPt = { x: bBox.x, y: bRowY };
-    return { aPt, bPt, aSide: 'left', bSide: 'left' };
+    const aPt = aAnchor ? pointOnSide(aBox, aAnchor.side, aAnchor.t) : { x: aBox.x, y: aRowY };
+    const bPt = bAnchor ? pointOnSide(bBox, bAnchor.side, bAnchor.t) : { x: bBox.x, y: bRowY };
+    return { aPt, bPt, aSide: aAnchor ? aAnchor.side : 'left', bSide: bAnchor ? bAnchor.side : 'left' };
   }
   const aCenterX = aBox.x + aBox.w / 2, bCenterX = bBox.x + bBox.w / 2;
-  let aSide: 'left' | 'right', bSide: 'left' | 'right';
-  if (aCenterX <= bCenterX) { aSide = 'right'; bSide = 'left'; } else { aSide = 'left'; bSide = 'right'; }
-  const aPt = { x: aSide === 'right' ? aBox.x + aBox.w : aBox.x, y: aRowY };
-  const bPt = { x: bSide === 'right' ? bBox.x + bBox.w : bBox.x, y: bRowY };
+  let autoASide: AnchorSide, autoBSide: AnchorSide;
+  if (aCenterX <= bCenterX) { autoASide = 'right'; autoBSide = 'left'; } else { autoASide = 'left'; autoBSide = 'right'; }
+  const aSide = aAnchor ? aAnchor.side : autoASide;
+  const bSide = bAnchor ? bAnchor.side : autoBSide;
+  const aPt = aAnchor ? pointOnSide(aBox, aAnchor.side, aAnchor.t) : { x: autoASide === 'right' ? aBox.x + aBox.w : aBox.x, y: aRowY };
+  const bPt = bAnchor ? pointOnSide(bBox, bAnchor.side, bAnchor.t) : { x: autoBSide === 'right' ? bBox.x + bBox.w : bBox.x, y: bRowY };
   return { aPt, bPt, aSide, bSide };
-}
-
-// Resolves an endpoint's Y position: the anchor-fraction override if one is
-// set (dragged there by the user), otherwise the default row-center Y.
-function anchorY(box: Box, defaultRowY: number, t: number | undefined): number {
-  if (t === undefined) return defaultRowY;
-  return box.y + box.h * t;
 }
 
 function bezierPointAt(p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point {
@@ -70,9 +111,9 @@ function bezierPointAt(p0: Point, p1: Point, p2: Point, p3: Point, t: number): P
 // shrinking the reserved space (which would compress/break the marker).
 const MARKER_CLEARANCE = 32;
 
-function markerAnchor(edge: Point, side: 'left' | 'right'): Point {
-  const dir = side === 'right' ? 1 : -1;
-  return { x: edge.x + dir * MARKER_CLEARANCE, y: edge.y };
+function markerAnchor(edge: Point, side: AnchorSide): Point {
+  const dir = sideDir(side);
+  return { x: edge.x + dir.x * MARKER_CLEARANCE, y: edge.y + dir.y * MARKER_CLEARANCE };
 }
 
 // Endpoint drag handles sit a few px off the entity edge, in the empty
@@ -81,17 +122,18 @@ function markerAnchor(edge: Point, side: 'left' | 'right'): Point {
 // is partly (or, for a left-attached edge, entirely) unclickable underneath
 // the entity's own hit area.
 const HANDLE_OFFSET = 9;
-function handleAnchor(edge: Point, side: 'left' | 'right'): Point {
-  const dir = side === 'right' ? 1 : -1;
-  return { x: edge.x + dir * HANDLE_OFFSET, y: edge.y };
+function handleAnchor(edge: Point, side: AnchorSide): Point {
+  const dir = sideDir(side);
+  return { x: edge.x + dir.x * HANDLE_OFFSET, y: edge.y + dir.y * HANDLE_OFFSET };
 }
 
-function bezierPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'left' | 'right') {
+function bezierPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSide) {
   const markerA = markerAnchor(aPt, aSide);
   const markerB = markerAnchor(bPt, bSide);
-  const dx = Math.max(Math.abs(markerB.x - markerA.x) * 0.5, 50);
-  const c1 = { x: markerA.x + (aSide === 'right' ? dx : -dx), y: markerA.y };
-  const c2 = { x: markerB.x + (bSide === 'right' ? dx : -dx), y: markerB.y };
+  const dirA = sideDir(aSide), dirB = sideDir(bSide);
+  const dist = Math.max(Math.hypot(markerB.x - markerA.x, markerB.y - markerA.y) * 0.5, 50);
+  const c1 = { x: markerA.x + dirA.x * dist, y: markerA.y + dirA.y * dist };
+  const c2 = { x: markerB.x + dirB.x * dist, y: markerB.y + dirB.y * dist };
   return {
     d: 'M ' + aPt.x + ' ' + aPt.y +
       ' L ' + markerA.x + ' ' + markerA.y +
@@ -101,27 +143,41 @@ function bezierPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'lef
   };
 }
 
-// Right-angle "elbow" routing: out horizontally from A, one vertical
-// segment, then horizontally into B. Works for the self-relation case too,
-// where both sides are equal and the elbow becomes a simple rectangular loop.
-function angularPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'left' | 'right') {
+// Right-angle "elbow" routing, generalized to any pair of edges: opposite-
+// facing edges (left-right or top-bottom) get a single mid-line between two
+// stubs, like before; a horizontal edge paired with a vertical one gets a
+// single L-shaped bend at their intersection.
+function angularPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSide) {
   const markerA = markerAnchor(aPt, aSide);
   const markerB = markerAnchor(bPt, bSide);
-  const dx = Math.max(Math.abs(markerB.x - markerA.x) * 0.5, 50);
-  const midAx = markerA.x + (aSide === 'right' ? dx : -dx);
-  const midBx = markerB.x + (bSide === 'right' ? dx : -dx);
-  const midX = (midAx + midBx) / 2;
-  return {
-    d: 'M ' + aPt.x + ' ' + aPt.y +
-      ' L ' + markerA.x + ' ' + markerA.y +
-      ' L ' + midX + ' ' + markerA.y + ' L ' + midX + ' ' + markerB.y +
-      ' L ' + markerB.x + ' ' + markerB.y +
-      ' L ' + bPt.x + ' ' + bPt.y,
-    mid: { x: midX, y: (markerA.y + markerB.y) / 2 }
-  };
+  const dirA = sideDir(aSide), dirB = sideDir(bSide);
+  const dist = Math.max(Math.hypot(markerB.x - markerA.x, markerB.y - markerA.y) * 0.5, 50);
+  const stubA = { x: markerA.x + dirA.x * dist, y: markerA.y + dirA.y * dist };
+  const stubB = { x: markerB.x + dirB.x * dist, y: markerB.y + dirB.y * dist };
+  const aHorizontal = aSide === 'left' || aSide === 'right';
+  const bHorizontal = bSide === 'left' || bSide === 'right';
+
+  let bends: Point[];
+  let mid: Point;
+  if (aHorizontal && bHorizontal) {
+    const midX = (stubA.x + stubB.x) / 2;
+    bends = [{ x: midX, y: markerA.y }, { x: midX, y: markerB.y }];
+    mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
+  } else if (!aHorizontal && !bHorizontal) {
+    const midY = (stubA.y + stubB.y) / 2;
+    bends = [{ x: markerA.x, y: midY }, { x: markerB.x, y: midY }];
+    mid = { x: (markerA.x + markerB.x) / 2, y: midY };
+  } else {
+    const bend = aHorizontal ? { x: markerB.x, y: markerA.y } : { x: markerA.x, y: markerB.y };
+    bends = [bend];
+    mid = bend;
+  }
+
+  const pts = [aPt, markerA, ...bends, markerB, bPt];
+  return { d: 'M ' + pts.map((p) => p.x + ' ' + p.y).join(' L '), mid };
 }
 
-function linePath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'left' | 'right') {
+function linePath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSide) {
   return state.data.lineStyle === 'angular' ? angularPath(aPt, aSide, bPt, bSide) : bezierPath(aPt, aSide, bPt, bSide);
 }
 
@@ -145,34 +201,36 @@ function displayRelationName(relation: Relation): string {
   return relation.name;
 }
 
-function crowFoot(point: Point, side: 'left' | 'right'): SVGGElement {
+function crowFoot(point: Point, side: AnchorSide): SVGGElement {
   // Prongs splay out right at the entity edge and converge to a single
   // point further along the line - like a foot planted against the box.
-  const dir = side === 'right' ? 1 : -1;
-  const forward = { x: point.x + dir * 12, y: point.y };
+  const dir = sideDir(side);
+  const perp = { x: -dir.y, y: dir.x };
+  const forward = { x: point.x + dir.x * 12, y: point.y + dir.y * 12 };
   const g = el('g', { class: 'crowfoot' });
   [-6, 6].forEach((off) => {
     g.appendChild(el('line', {
-      x1: point.x, y1: point.y + off, x2: forward.x, y2: forward.y,
+      x1: point.x + perp.x * off, y1: point.y + perp.y * off, x2: forward.x, y2: forward.y,
       stroke: theme.colors.relationStroke, 'stroke-width': 1.5
     }));
   });
   return g;
 }
 
-function bar(point: Point, side: 'left' | 'right', distance: number): SVGLineElement {
-  const dir = side === 'right' ? 1 : -1;
-  const x = point.x + dir * distance;
+function bar(point: Point, side: AnchorSide, distance: number): SVGLineElement {
+  const dir = sideDir(side);
+  const perp = { x: -dir.y, y: dir.x };
+  const cx = point.x + dir.x * distance, cy = point.y + dir.y * distance;
   return el('line', {
-    x1: x, y1: point.y - 6, x2: x, y2: point.y + 6,
+    x1: cx - perp.x * 6, y1: cy - perp.y * 6, x2: cx + perp.x * 6, y2: cy + perp.y * 6,
     stroke: theme.colors.relationStroke, 'stroke-width': 1.5
   });
 }
 
-function circle(point: Point, side: 'left' | 'right', distance: number): SVGCircleElement {
-  const dir = side === 'right' ? 1 : -1;
+function circle(point: Point, side: AnchorSide, distance: number): SVGCircleElement {
+  const dir = sideDir(side);
   return el('circle', {
-    cx: point.x + dir * distance, cy: point.y, r: 4,
+    cx: point.x + dir.x * distance, cy: point.y + dir.y * distance, r: 4,
     fill: theme.colors.bodyBg, stroke: theme.colors.relationStroke, 'stroke-width': 1.5
   });
 }
@@ -180,7 +238,7 @@ function circle(point: Point, side: 'left' | 'right', distance: number): SVGCirc
 // Crow's foot notation with optionality: the crow's foot (or bars) sit right
 // at the entity edge; an outer bar/circle further along the line marks
 // mandatory/optional. "many" alone (no outer mark) is also a valid choice.
-function cardinalityMarker(point: Point, side: 'left' | 'right', cardinality: Cardinality): SVGGElement {
+function cardinalityMarker(point: Point, side: AnchorSide, cardinality: Cardinality): SVGGElement {
   const g = el('g', { class: 'cardinality-marker' });
   switch (cardinality) {
     case 'one':
@@ -236,9 +294,7 @@ function updateRelationNode(node: SVGGElement, relation: Relation): void {
   const bRow = entityRenderer.getColumnRowCenter(relation.targetEntityId, firstPair.targetColumnId);
   if (!aRow || !bRow) { node.style.display = 'none'; return; }
 
-  const aRowY = anchorY(aBox, aRow.y, relation.sourceAnchorT);
-  const bRowY = anchorY(bBox, bRow.y, relation.targetAnchorT);
-  const geom = computeEndpoints(aBox, aRowY, bBox, bRowY, relation.sourceEntityId === relation.targetEntityId);
+  const geom = computeEndpoints(aBox, aRow.y, bBox, bRow.y, relation.sourceEntityId === relation.targetEntityId, relation.sourceAnchor, relation.targetAnchor);
   const path = linePath(geom.aPt, geom.aSide, geom.bPt, geom.bSide);
 
   const selected = state.data.selected;
@@ -371,22 +427,20 @@ function onHandleMouseDown(e: MouseEvent): void {
   const otherHandle = g.querySelector('.relation-handle[data-end="' + (end === 'source' ? 'target' : 'source') + '"]') as SVGCircleElement | null;
   if (!otherHandle) return;
   const fixedPt = { x: Number(otherHandle.getAttribute('cx')), y: Number(otherHandle.getAttribute('cy')) };
-  const draggedX = Number(handle.getAttribute('cx'));
 
-  let lastT: number | undefined;
+  let lastAnchor: Anchor | undefined;
 
   function onMove(ev: MouseEvent): void {
     const world = viewport.screenToWorld(ev.clientX, ev.clientY);
-    const clampedY = Math.min(Math.max(world.y, box!.y), box!.y + box!.h);
-    lastT = (clampedY - box!.y) / box!.h;
-    setTempLine(fixedPt, { x: draggedX, y: clampedY });
+    lastAnchor = nearestAnchor(box!, world);
+    setTempLine(fixedPt, pointOnSide(box!, lastAnchor.side, lastAnchor.t));
   }
   function onUp(): void {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     clearTempLine();
-    if (lastT === undefined) return;
-    state.updateRelation(relationId, end === 'source' ? { sourceAnchorT: lastT } : { targetAnchorT: lastT });
+    if (!lastAnchor) return;
+    state.updateRelation(relationId, end === 'source' ? { sourceAnchor: lastAnchor } : { targetAnchor: lastAnchor });
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);

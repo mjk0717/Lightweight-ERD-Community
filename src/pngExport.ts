@@ -3,7 +3,7 @@ import { theme } from './theme';
 import { downloadDataUrl } from './util';
 import { entityRenderer } from './entityRenderer';
 import { sourceCardinalityOf, targetCardinalityOf } from './cardinality';
-import { Box, Cardinality, Column, Entity, Point, Relation } from './types';
+import { Anchor, AnchorSide, Box, Cardinality, Column, Entity, Point, Relation } from './types';
 
 const MARGIN = 50;
 const PIXEL_RATIO = 2;
@@ -37,63 +37,85 @@ function bezierPointAt(p0: Point, p1: Point, p2: Point, p3: Point, t: number): P
   return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
 }
 
-interface Endpoints { aPt: Point; bPt: Point; aSide: 'left' | 'right'; bSide: 'left' | 'right'; }
+interface Endpoints { aPt: Point; bPt: Point; aSide: AnchorSide; bSide: AnchorSide; }
 
-function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, isSelf: boolean): Endpoints {
+// See relationRenderer.ts for the canonical versions of these - mirrored
+// here so the PNG export matches the on-screen rendering exactly.
+function sideDir(side: AnchorSide): Point {
+  switch (side) {
+    case 'left': return { x: -1, y: 0 };
+    case 'right': return { x: 1, y: 0 };
+    case 'top': return { x: 0, y: -1 };
+    case 'bottom': return { x: 0, y: 1 };
+  }
+}
+
+function pointOnSide(box: Box, side: AnchorSide, t: number): Point {
+  switch (side) {
+    case 'left': return { x: box.x, y: box.y + box.h * t };
+    case 'right': return { x: box.x + box.w, y: box.y + box.h * t };
+    case 'top': return { x: box.x + box.w * t, y: box.y };
+    case 'bottom': return { x: box.x + box.w * t, y: box.y + box.h };
+  }
+}
+
+function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, isSelf: boolean, aAnchor?: Anchor, bAnchor?: Anchor): Endpoints {
   if (isSelf) {
-    const aPt = { x: aBox.x, y: aRowY };
-    const bPt = { x: bBox.x, y: bRowY };
-    return { aPt, bPt, aSide: 'left', bSide: 'left' };
+    const aPt = aAnchor ? pointOnSide(aBox, aAnchor.side, aAnchor.t) : { x: aBox.x, y: aRowY };
+    const bPt = bAnchor ? pointOnSide(bBox, bAnchor.side, bAnchor.t) : { x: bBox.x, y: bRowY };
+    return { aPt, bPt, aSide: aAnchor ? aAnchor.side : 'left', bSide: bAnchor ? bAnchor.side : 'left' };
   }
   const aCenterX = aBox.x + aBox.w / 2, bCenterX = bBox.x + bBox.w / 2;
-  let aSide: 'left' | 'right', bSide: 'left' | 'right';
-  if (aCenterX <= bCenterX) { aSide = 'right'; bSide = 'left'; } else { aSide = 'left'; bSide = 'right'; }
-  const aPt = { x: aSide === 'right' ? aBox.x + aBox.w : aBox.x, y: aRowY };
-  const bPt = { x: bSide === 'right' ? bBox.x + bBox.w : bBox.x, y: bRowY };
+  let autoASide: AnchorSide, autoBSide: AnchorSide;
+  if (aCenterX <= bCenterX) { autoASide = 'right'; autoBSide = 'left'; } else { autoASide = 'left'; autoBSide = 'right'; }
+  const aSide = aAnchor ? aAnchor.side : autoASide;
+  const bSide = bAnchor ? bAnchor.side : autoBSide;
+  const aPt = aAnchor ? pointOnSide(aBox, aAnchor.side, aAnchor.t) : { x: autoASide === 'right' ? aBox.x + aBox.w : aBox.x, y: aRowY };
+  const bPt = bAnchor ? pointOnSide(bBox, bAnchor.side, bAnchor.t) : { x: autoBSide === 'right' ? bBox.x + bBox.w : bBox.x, y: bRowY };
   return { aPt, bPt, aSide, bSide };
 }
 
-// See relationRenderer.ts's markerAnchor - mirrors the same fixed-clearance
-// logic so the PNG export matches the on-screen rendering.
 const MARKER_CLEARANCE = 32;
 
-function markerAnchor(edge: Point, side: 'left' | 'right'): Point {
-  const dir = side === 'right' ? 1 : -1;
-  return { x: edge.x + dir * MARKER_CLEARANCE, y: edge.y };
+function markerAnchor(edge: Point, side: AnchorSide): Point {
+  const dir = sideDir(side);
+  return { x: edge.x + dir.x * MARKER_CLEARANCE, y: edge.y + dir.y * MARKER_CLEARANCE };
 }
 
-function drawCrowFoot(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right'): void {
+function drawCrowFoot(ctx: CanvasRenderingContext2D, point: Point, side: AnchorSide): void {
   // Prongs splay out right at the entity edge and converge to a single
   // point further along the line - like a foot planted against the box.
-  const dir = side === 'right' ? 1 : -1;
-  const forward = { x: point.x + dir * 12, y: point.y };
+  const dir = sideDir(side);
+  const perp = { x: -dir.y, y: dir.x };
+  const forward = { x: point.x + dir.x * 12, y: point.y + dir.y * 12 };
   [-6, 6].forEach((off) => {
     ctx.beginPath();
-    ctx.moveTo(point.x, point.y + off);
+    ctx.moveTo(point.x + perp.x * off, point.y + perp.y * off);
     ctx.lineTo(forward.x, forward.y);
     ctx.stroke();
   });
 }
 
-function drawBar(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right', distance: number): void {
-  const dir = side === 'right' ? 1 : -1;
-  const x = point.x + dir * distance;
+function drawBar(ctx: CanvasRenderingContext2D, point: Point, side: AnchorSide, distance: number): void {
+  const dir = sideDir(side);
+  const perp = { x: -dir.y, y: dir.x };
+  const cx = point.x + dir.x * distance, cy = point.y + dir.y * distance;
   ctx.beginPath();
-  ctx.moveTo(x, point.y - 6);
-  ctx.lineTo(x, point.y + 6);
+  ctx.moveTo(cx - perp.x * 6, cy - perp.y * 6);
+  ctx.lineTo(cx + perp.x * 6, cy + perp.y * 6);
   ctx.stroke();
 }
 
-function drawCircle(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right', distance: number): void {
-  const dir = side === 'right' ? 1 : -1;
+function drawCircle(ctx: CanvasRenderingContext2D, point: Point, side: AnchorSide, distance: number): void {
+  const dir = sideDir(side);
   ctx.beginPath();
-  ctx.arc(point.x + dir * distance, point.y, 4, 0, Math.PI * 2);
+  ctx.arc(point.x + dir.x * distance, point.y + dir.y * distance, 4, 0, Math.PI * 2);
   ctx.fillStyle = theme.colors.bodyBg;
   ctx.fill();
   ctx.stroke();
 }
 
-function drawCardinalityMarker(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right', cardinality: Cardinality): void {
+function drawCardinalityMarker(ctx: CanvasRenderingContext2D, point: Point, side: AnchorSide, cardinality: Cardinality): void {
   switch (cardinality) {
     case 'one':
       drawBar(ctx, point, side, 9);
@@ -142,12 +164,11 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
   const bRow = entityRenderer.getColumnRowCenter(relation.targetEntityId, firstPair.targetColumnId);
   if (!aRow || !bRow) return;
 
-  const aRowY = relation.sourceAnchorT === undefined ? aRow.y : aBox.y + aBox.h * relation.sourceAnchorT;
-  const bRowY = relation.targetAnchorT === undefined ? bRow.y : bBox.y + bBox.h * relation.targetAnchorT;
-  const geom = computeEndpoints(aBox, aRowY, bBox, bRowY, relation.sourceEntityId === relation.targetEntityId);
+  const geom = computeEndpoints(aBox, aRow.y, bBox, bRow.y, relation.sourceEntityId === relation.targetEntityId, relation.sourceAnchor, relation.targetAnchor);
   const markerA = markerAnchor(geom.aPt, geom.aSide);
   const markerB = markerAnchor(geom.bPt, geom.bSide);
-  const dx = Math.max(Math.abs(markerB.x - markerA.x) * 0.5, 50);
+  const dirA = sideDir(geom.aSide), dirB = sideDir(geom.bSide);
+  const dist = Math.max(Math.hypot(markerB.x - markerA.x, markerB.y - markerA.y) * 0.5, 50);
 
   ctx.strokeStyle = theme.colors.relationStroke;
   ctx.lineWidth = 1.5;
@@ -158,16 +179,29 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
 
   let mid: Point;
   if (state.data.lineStyle === 'angular') {
-    const midAx = markerA.x + (geom.aSide === 'right' ? dx : -dx);
-    const midBx = markerB.x + (geom.bSide === 'right' ? dx : -dx);
-    const midX = (midAx + midBx) / 2;
-    ctx.lineTo(midX, markerA.y);
-    ctx.lineTo(midX, markerB.y);
+    const stubA = { x: markerA.x + dirA.x * dist, y: markerA.y + dirA.y * dist };
+    const stubB = { x: markerB.x + dirB.x * dist, y: markerB.y + dirB.y * dist };
+    const aHorizontal = geom.aSide === 'left' || geom.aSide === 'right';
+    const bHorizontal = geom.bSide === 'left' || geom.bSide === 'right';
+    if (aHorizontal && bHorizontal) {
+      const midX = (stubA.x + stubB.x) / 2;
+      ctx.lineTo(midX, markerA.y);
+      ctx.lineTo(midX, markerB.y);
+      mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
+    } else if (!aHorizontal && !bHorizontal) {
+      const midY = (stubA.y + stubB.y) / 2;
+      ctx.lineTo(markerA.x, midY);
+      ctx.lineTo(markerB.x, midY);
+      mid = { x: (markerA.x + markerB.x) / 2, y: midY };
+    } else {
+      const bend = aHorizontal ? { x: markerB.x, y: markerA.y } : { x: markerA.x, y: markerB.y };
+      ctx.lineTo(bend.x, bend.y);
+      mid = bend;
+    }
     ctx.lineTo(markerB.x, markerB.y);
-    mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
   } else {
-    const c1 = { x: markerA.x + (geom.aSide === 'right' ? dx : -dx), y: markerA.y };
-    const c2 = { x: markerB.x + (geom.bSide === 'right' ? dx : -dx), y: markerB.y };
+    const c1 = { x: markerA.x + dirA.x * dist, y: markerA.y + dirA.y * dist };
+    const c2 = { x: markerB.x + dirB.x * dist, y: markerB.y + dirB.y * dist };
     ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, markerB.x, markerB.y);
     mid = bezierPointAt(markerA, c1, c2, markerB, 0.5);
   }

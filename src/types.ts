@@ -22,6 +22,15 @@ export interface Entity {
 
 export type Cardinality = 'zero-or-one' | 'one' | 'zero-or-many' | 'many' | 'one-or-many';
 
+// Which edge of an entity's box a relation endpoint attaches to, and how far
+// along that edge (0-1, left-to-right for top/bottom, top-to-bottom for
+// left/right).
+export type AnchorSide = 'left' | 'right' | 'top' | 'bottom';
+export interface Anchor {
+  side: AnchorSide;
+  t: number;
+}
+
 // One column pair of the FK relationship - a relation has one pair for a
 // plain FK, or several for a composite (multi-column) FK.
 export interface RelationColumnPair {
@@ -38,12 +47,13 @@ export interface Relation {
   columnPairs: RelationColumnPair[];
   sourceCardinality: Cardinality;
   targetCardinality: Cardinality;
-  // Purely visual: where along the entity's own edge the line attaches,
-  // as a 0-1 fraction of its height. Undefined falls back to the default
-  // (the first column pair's row center) - dragging an endpoint handle only
-  // ever sets this, never changes which entity/column the relation targets.
-  sourceAnchorT?: number;
-  targetAnchorT?: number;
+  // Purely visual: which edge of the entity's own box the line attaches to,
+  // and how far along it. Undefined falls back to the default (auto left/
+  // right side, at the first column pair's row) - dragging an endpoint
+  // handle only ever sets this, never changes which entity/column the
+  // relation targets.
+  sourceAnchor?: Anchor;
+  targetAnchor?: Anchor;
 }
 
 export interface SystemColumnDef {
