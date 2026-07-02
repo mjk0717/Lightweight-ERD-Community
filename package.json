@@ -1,0 +1,16 @@
+{
+  "name": "erd-editor",
+  "version": "1.0.0",
+  "description": "Offline-capable HTML ERD editor",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && esbuild src/main.ts --bundle --outfile=dist/bundle.js --target=es2018",
+    "watch": "esbuild src/main.ts --bundle --outfile=dist/bundle.js --target=es2018 --watch"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3"
+  }
+}
