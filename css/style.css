@@ -195,6 +195,7 @@ body { display: flex; flex-direction: column; }
 .col-grid th { text-align: left; font-size: 11px; color: #64748b; padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
 .col-grid td { padding: 3px 4px; vertical-align: middle; }
 .col-grid input[type="text"] { width: 100%; margin: 0; padding: 4px 6px; font-size: 12px; }
+.col-grid input[type="text"].cell-selected { background: #dbeafe; outline: 1px solid #2563eb; outline-offset: -1px; }
 .col-grid .col-handle-cell { width: 18px; text-align: center; }
 .col-grid .col-order { width: 22px; color: #94a3b8; font-size: 11px; }
 .col-grid .col-check { width: 32px; text-align: center; }

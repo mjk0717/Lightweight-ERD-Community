@@ -8,6 +8,17 @@ let draft: Entity | null = null;
 let gridBody: HTMLElement;
 let dragIndex: number | null = null;
 
+// Excel-like range selection/copy-paste over the grid's text columns (row
+// reordering has its own drag handle, so this only spans Name/Comment/Data
+// type - the columns that are genuinely free-text).
+type CellField = 'name' | 'comment' | 'dataType';
+const CELL_FIELDS: CellField[] = ['name', 'comment', 'dataType'];
+const CELL_CLASSES = ['f-name', 'f-comment', 'f-type'];
+interface CellIdx { row: number; col: number; }
+let selAnchor: CellIdx | null = null;
+let selFocus: CellIdx | null = null;
+let isSelecting = false;
+
 function newColumn(): Column {
   return { id: nextId('col'), name: 'NEW_COLUMN', dataType: 'VARCHAR2(50)', comment: '', pk: false, fk: false, nullable: true, isSystem: false, systemColId: null };
 }
@@ -80,6 +91,121 @@ function onDragEnd(): void {
   document.removeEventListener('mouseup', onDragEnd);
 }
 
+function cellInput(row: number, col: number): HTMLInputElement | null {
+  const tr = gridBody.querySelectorAll('tr')[row] as HTMLElement | undefined;
+  if (!tr) return null;
+  return tr.querySelector('.' + CELL_CLASSES[col]) as HTMLInputElement | null;
+}
+
+function cellIndexOf(input: HTMLInputElement): CellIdx | null {
+  const tr = input.closest('tr');
+  if (!tr) return null;
+  const rows = Array.prototype.slice.call(gridBody.querySelectorAll('tr')) as HTMLElement[];
+  const row = rows.indexOf(tr as HTMLElement);
+  const col = CELL_CLASSES.findIndex((cls) => input.classList.contains(cls));
+  if (row === -1 || col === -1) return null;
+  return { row, col };
+}
+
+function rangeBounds(): { r0: number; r1: number; c0: number; c1: number } | null {
+  if (!selAnchor || !selFocus) return null;
+  return {
+    r0: Math.min(selAnchor.row, selFocus.row), r1: Math.max(selAnchor.row, selFocus.row),
+    c0: Math.min(selAnchor.col, selFocus.col), c1: Math.max(selAnchor.col, selFocus.col)
+  };
+}
+
+function refreshSelectionHighlight(): void {
+  gridBody.querySelectorAll('.cell-selected').forEach((el) => el.classList.remove('cell-selected'));
+  const b = rangeBounds();
+  if (!b) return;
+  for (let r = b.r0; r <= b.r1; r++) {
+    for (let c = b.c0; c <= b.c1; c++) {
+      const input = cellInput(r, c);
+      if (input) input.classList.add('cell-selected');
+    }
+  }
+}
+
+function onGridMouseDown(e: MouseEvent): void {
+  const input = (e.target as HTMLElement).closest('input') as HTMLInputElement | null;
+  if (!input) return;
+  const idx = cellIndexOf(input);
+  if (!idx) return;
+  isSelecting = true;
+  selAnchor = idx;
+  selFocus = idx;
+  refreshSelectionHighlight();
+}
+
+function onGridMouseOver(e: MouseEvent): void {
+  if (!isSelecting) return;
+  const input = (e.target as HTMLElement).closest('input') as HTMLInputElement | null;
+  if (!input) return;
+  const idx = cellIndexOf(input);
+  if (!idx) return;
+  selFocus = idx;
+  refreshSelectionHighlight();
+}
+
+function onGridMouseUp(): void {
+  isSelecting = false;
+}
+
+// Only take over the clipboard for a genuine multi-cell range - a single
+// selected cell keeps the browser's normal text-selection copy/paste so the
+// user can still copy a partial string out of one field.
+function onGridCopy(e: ClipboardEvent): void {
+  if (!document.contains(gridBody)) return;
+  const active = document.activeElement;
+  if (!active || !gridBody.contains(active)) return;
+  const b = rangeBounds();
+  if (!b || (b.r0 === b.r1 && b.c0 === b.c1)) return;
+  const lines: string[] = [];
+  for (let r = b.r0; r <= b.r1; r++) {
+    const vals: string[] = [];
+    for (let c = b.c0; c <= b.c1; c++) vals.push((cellInput(r, c) || { value: '' }).value);
+    lines.push(vals.join('\t'));
+  }
+  e.clipboardData!.setData('text/plain', lines.join('\n'));
+  e.preventDefault();
+}
+
+function onGridPaste(e: ClipboardEvent): void {
+  if (!document.contains(gridBody) || !draft) return;
+  const active = document.activeElement as HTMLElement | null;
+  if (!active || !gridBody.contains(active)) return;
+  const anchor = active instanceof HTMLInputElement ? cellIndexOf(active) : null;
+  if (!anchor) return;
+  const text: string = (e.clipboardData || (window as any).clipboardData).getData('text/plain');
+  if (!text) return;
+  const rawLines = text.replace(/\r/g, '').split('\n');
+  if (rawLines.length && rawLines[rawLines.length - 1] === '') rawLines.pop();
+  const grid = rawLines.map((line) => line.split('\t'));
+  // A single plain value (no tabs/newlines) isn't a range paste - leave it
+  // to the browser's normal single-field paste.
+  if (grid.length <= 1 && grid[0].length <= 1) return;
+  e.preventDefault();
+
+  let maxCol = 0;
+  grid.forEach((vals, rOffset) => {
+    const row = anchor.row + rOffset;
+    const col = draft!.columns[row];
+    if (!col || col.isSystem) return; // clamped to existing, non-system rows
+    vals.forEach((val, cOffset) => {
+      const c = anchor.col + cOffset;
+      if (c >= CELL_FIELDS.length) return;
+      maxCol = Math.max(maxCol, c);
+      (col as any)[CELL_FIELDS[c]] = val;
+    });
+  });
+
+  selAnchor = anchor;
+  selFocus = { row: Math.min(anchor.row + grid.length - 1, draft.columns.length - 1), col: Math.min(maxCol, CELL_FIELDS.length - 1) };
+  renderGrid();
+  refreshSelectionHighlight();
+}
+
 function renderGrid(): void {
   gridBody.innerHTML = '';
   draft!.columns.forEach((col, idx) => gridBody.appendChild(renderRow(col, idx)));
@@ -135,6 +261,11 @@ function buildBody(entity: Entity): HTMLElement {
   wrap.appendChild(table);
   gridBody = table.querySelector('tbody')!;
   renderGrid();
+  table.addEventListener('mousedown', onGridMouseDown);
+  table.addEventListener('mouseover', onGridMouseOver);
+  document.addEventListener('mouseup', onGridMouseUp);
+  document.addEventListener('copy', onGridCopy);
+  document.addEventListener('paste', onGridPaste);
 
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
@@ -152,6 +283,17 @@ function buildBody(entity: Entity): HTMLElement {
   return wrap;
 }
 
+// The grid's copy/paste listeners live on document (so paste works even
+// when a checkbox or button, not a text input, currently has focus) - must
+// be torn down when the modal closes or they'd pile up across re-opens.
+function cleanupGridListeners(): void {
+  document.removeEventListener('mouseup', onGridMouseUp);
+  document.removeEventListener('copy', onGridCopy);
+  document.removeEventListener('paste', onGridPaste);
+  selAnchor = null;
+  selFocus = null;
+}
+
 function open(entityId: string): void {
   const entity = state.getEntity(entityId);
   if (!entity) return;
@@ -161,6 +303,7 @@ function open(entityId: string): void {
     title: 'Table details',
     width: '720px',
     body,
+    onClose: cleanupGridListeners,
     actions: [
       { label: 'Delete table', variant: 'danger', onClick: () => { state.removeEntity(entity.id); modal.close(); } },
       { label: 'Cancel', onClick: () => modal.close() },
@@ -193,6 +336,7 @@ function openNew(template: Entity): void {
     title: 'Table details',
     width: '720px',
     body,
+    onClose: cleanupGridListeners,
     actions: [
       { label: 'Cancel', onClick: () => modal.close() },
       { label: 'Save', variant: 'primary', onClick: () => {
