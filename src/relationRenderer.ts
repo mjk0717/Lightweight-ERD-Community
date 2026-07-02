@@ -53,23 +53,22 @@ function bezierPointAt(p0: Point, p1: Point, p2: Point, p3: Point, t: number): P
 }
 
 // Crow's foot/one-many markers reach up to ~20px out from the entity edge.
-// When two entities sit closer together than that, the marker at one end
-// can run past the other end's marker and the shapes collide/overlap. This
-// guarantees a minimum straight "lead-in" stub at each end (shrinking
-// gracefully toward the midpoint if the entities are extremely close, so
-// the two stubs never cross) - markers anchor on the stub, not the raw edge.
-const MARKER_CLEARANCE = 28;
+// When two entities sit close together, the marker at one end can run past
+// the other end's marker and the shapes collide/overlap. Always reserve a
+// fixed clearance stub at each end - regardless of how close the entities
+// are - so the marker itself never gets compressed or broken; if the boxes
+// are closer than 2x this stub, the connecting curve simply loops back on
+// itself in the middle rather than shrinking the guaranteed lead-in.
+const MARKER_CLEARANCE = 32;
 
-function markerAnchor(edge: Point, side: 'left' | 'right', otherEdge: Point): Point {
+function markerAnchor(edge: Point, side: 'left' | 'right'): Point {
   const dir = side === 'right' ? 1 : -1;
-  const totalDist = Math.hypot(otherEdge.x - edge.x, otherEdge.y - edge.y);
-  const stub = Math.min(MARKER_CLEARANCE, totalDist / 2);
-  return { x: edge.x + dir * stub, y: edge.y };
+  return { x: edge.x + dir * MARKER_CLEARANCE, y: edge.y };
 }
 
 function bezierPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'left' | 'right') {
-  const markerA = markerAnchor(aPt, aSide, bPt);
-  const markerB = markerAnchor(bPt, bSide, aPt);
+  const markerA = markerAnchor(aPt, aSide);
+  const markerB = markerAnchor(bPt, bSide);
   const dx = Math.max(Math.abs(markerB.x - markerA.x) * 0.5, 50);
   const c1 = { x: markerA.x + (aSide === 'right' ? dx : -dx), y: markerA.y };
   const c2 = { x: markerB.x + (bSide === 'right' ? dx : -dx), y: markerB.y };
@@ -86,8 +85,8 @@ function bezierPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'lef
 // segment, then horizontally into B. Works for the self-relation case too,
 // where both sides are equal and the elbow becomes a simple rectangular loop.
 function angularPath(aPt: Point, aSide: 'left' | 'right', bPt: Point, bSide: 'left' | 'right') {
-  const markerA = markerAnchor(aPt, aSide, bPt);
-  const markerB = markerAnchor(bPt, bSide, aPt);
+  const markerA = markerAnchor(aPt, aSide);
+  const markerB = markerAnchor(bPt, bSide);
   const dx = Math.max(Math.abs(markerB.x - markerA.x) * 0.5, 50);
   const midAx = markerA.x + (aSide === 'right' ? dx : -dx);
   const midBx = markerB.x + (bSide === 'right' ? dx : -dx);
@@ -235,8 +234,8 @@ function updateRelationNode(node: SVGGElement, relation: Relation): void {
 
   const endpoints = node.querySelector('.relation-endpoints') as SVGGElement;
   endpoints.innerHTML = '';
-  endpoints.appendChild(cardinalityMarker(markerAnchor(geom.aPt, geom.aSide, geom.bPt), geom.aSide, sourceCardinalityOf(relation)));
-  endpoints.appendChild(cardinalityMarker(markerAnchor(geom.bPt, geom.bSide, geom.aPt), geom.bSide, targetCardinalityOf(relation)));
+  endpoints.appendChild(cardinalityMarker(markerAnchor(geom.aPt, geom.aSide), geom.aSide, sourceCardinalityOf(relation)));
+  endpoints.appendChild(cardinalityMarker(markerAnchor(geom.bPt, geom.bSide), geom.bSide, targetCardinalityOf(relation)));
 
   const labelGroup = node.querySelector('.relation-label') as SVGGElement;
   const text = labelGroup.querySelector('.relation-label-text') as SVGTextElement;

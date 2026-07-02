@@ -53,15 +53,13 @@ function computeEndpoints(aBox: Box, aRowY: number, bBox: Box, bRowY: number, is
   return { aPt, bPt, aSide, bSide };
 }
 
-// See relationRenderer.ts's markerAnchor - mirrors the same minimum-clearance
+// See relationRenderer.ts's markerAnchor - mirrors the same fixed-clearance
 // logic so the PNG export matches the on-screen rendering.
-const MARKER_CLEARANCE = 28;
+const MARKER_CLEARANCE = 32;
 
-function markerAnchor(edge: Point, side: 'left' | 'right', otherEdge: Point): Point {
+function markerAnchor(edge: Point, side: 'left' | 'right'): Point {
   const dir = side === 'right' ? 1 : -1;
-  const totalDist = Math.hypot(otherEdge.x - edge.x, otherEdge.y - edge.y);
-  const stub = Math.min(MARKER_CLEARANCE, totalDist / 2);
-  return { x: edge.x + dir * stub, y: edge.y };
+  return { x: edge.x + dir * MARKER_CLEARANCE, y: edge.y };
 }
 
 function drawCrowFoot(ctx: CanvasRenderingContext2D, point: Point, side: 'left' | 'right'): void {
@@ -142,8 +140,8 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
   if (!aRow || !bRow) return;
 
   const geom = computeEndpoints(aBox, aRow.y, bBox, bRow.y, relation.sourceEntityId === relation.targetEntityId);
-  const markerA = markerAnchor(geom.aPt, geom.aSide, geom.bPt);
-  const markerB = markerAnchor(geom.bPt, geom.bSide, geom.aPt);
+  const markerA = markerAnchor(geom.aPt, geom.aSide);
+  const markerB = markerAnchor(geom.bPt, geom.bSide);
   const dx = Math.max(Math.abs(markerB.x - markerA.x) * 0.5, 50);
 
   ctx.strokeStyle = theme.colors.relationStroke;
