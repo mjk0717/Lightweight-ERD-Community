@@ -17,7 +17,9 @@ async function exportJson(): Promise<void> {
     designMode: data.designMode, lineStyle: data.lineStyle, minimapVisible: data.minimapVisible,
     history: history.exportHistory()
   };
-  const text = JSON.stringify(payload, null, 2);
+  // Compact on purpose - exports carry up to 50 full-document history
+  // snapshots, and pretty-printing balloons the file size.
+  const text = JSON.stringify(payload);
 
   const picker = (window as unknown as { showSaveFilePicker?: (opts: unknown) => Promise<FileSystemFileHandleLike> }).showSaveFilePicker;
   if (picker) {

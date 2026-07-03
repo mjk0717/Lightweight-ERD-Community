@@ -9,6 +9,7 @@ import { menuBar } from './menuBar';
 import { minimap } from './minimap';
 import { contextMenu } from './contextMenu';
 import { history } from './history';
+import { defaultDiagram } from './defaultDiagram';
 import { closest, nextId } from './util';
 import { Entity } from './types';
 
@@ -89,6 +90,10 @@ function onKeydown(e: KeyboardEvent): void {
     const k = e.key.toLowerCase();
     if (k === 'c' && state.data.selectedEntityIds.length) { e.preventDefault(); copySelected(); }
     else if (k === 'v' && clipboard.length) { e.preventDefault(); pasteClipboard(); }
+    else if (k === 'a' && state.data.entities.length) {
+      e.preventDefault();
+      state.selectEntities(state.data.entities.map((en) => en.id));
+    }
   }
 }
 
@@ -111,7 +116,9 @@ function onCanvasBackgroundContextMenu(e: MouseEvent): void {
 }
 
 function init(): void {
-  state.load();
+  // A fresh tab session (nothing in sessionStorage yet) opens on the bundled
+  // sample diagram rather than an empty canvas.
+  if (!state.load()) state.replaceAll(defaultDiagram);
   history.init();
 
   const viewportEl = document.getElementById('canvas-viewport')!;
