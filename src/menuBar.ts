@@ -36,7 +36,9 @@ const MENUS: MenuEntry[] = [
     title: 'Project',
     items: [
       { label: 'Open…', onClick: () => jsonIO.importJson() },
-      { label: 'Save', onClick: () => jsonIO.exportJson() },
+      { label: 'Save…', shortcut: 'Ctrl+S', onClick: () => jsonIO.exportJson() },
+      { separator: true },
+      { label: 'System columns', onClick: () => modalSystemColumns.open() },
       { separator: true },
       { label: 'Close', onClick: closeProject }
     ]
@@ -45,9 +47,7 @@ const MENUS: MenuEntry[] = [
     title: 'Edit',
     items: [
       { label: 'Undo', shortcut: 'Ctrl+Z', disabled: () => !history.canUndo(), onClick: () => history.undo() },
-      { label: 'Redo', shortcut: 'Ctrl+Y', disabled: () => !history.canRedo(), onClick: () => history.redo() },
-      { separator: true },
-      { label: 'System columns', onClick: () => modalSystemColumns.open() }
+      { label: 'Redo', shortcut: 'Ctrl+Y', disabled: () => !history.canRedo(), onClick: () => history.redo() }
     ]
   },
   {
@@ -130,9 +130,20 @@ function openDropdown(entry: MenuEntry, trigger: HTMLElement): void {
   }, 0);
 }
 
+// Ctrl/Cmd+S saves the project. Skipped while a modal is open (its edits may
+// not be committed to the diagram yet, so saving now would write stale
+// state) - in that case the browser's own default is left alone.
+function onSaveShortcut(e: KeyboardEvent): void {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return;
+  if (document.querySelector('.modal-overlay')) return;
+  e.preventDefault();
+  jsonIO.exportJson();
+}
+
 function init(): void {
   barEl = document.getElementById('menu-bar')!;
   if (!barEl) return;
+  document.addEventListener('keydown', onSaveShortcut);
   MENUS.forEach((entry) => {
     const trigger = document.createElement('button');
     trigger.type = 'button';

@@ -4,13 +4,42 @@ import { SerializedState } from './types';
 
 let fileInput: HTMLInputElement | null = null;
 
-function exportJson(): void {
+// The File System Access API (showSaveFilePicker) is what lets the user
+// choose the exact save location/filename via the OS "Save As" dialog. It's
+// only present in a secure context on supporting browsers - notably absent
+// when the app is opened straight from file:// - so this is feature-detected
+// with a plain download as the fallback.
+async function exportJson(): Promise<void> {
   const data = state.data;
   const payload: SerializedState = {
     entities: data.entities, relations: data.relations, systemColumns: data.systemColumns, view: data.view,
     designMode: data.designMode, lineStyle: data.lineStyle
   };
-  downloadText(JSON.stringify(payload, null, 2), 'erd-diagram.json', 'application/json');
+  const text = JSON.stringify(payload, null, 2);
+
+  const picker = (window as unknown as { showSaveFilePicker?: (opts: unknown) => Promise<FileSystemFileHandleLike> }).showSaveFilePicker;
+  if (picker) {
+    try {
+      const handle = await picker({
+        suggestedName: 'erd-diagram.json',
+        types: [{ description: 'ERD diagram (JSON)', accept: { 'application/json': ['.json'] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(text);
+      await writable.close();
+      return;
+    } catch (e) {
+      // The user dismissing the dialog throws AbortError - that's a normal
+      // cancel, not an error to fall back from.
+      if ((e as { name?: string }).name === 'AbortError') return;
+      // Anything else (e.g. permission/quirk) falls through to the download.
+    }
+  }
+  downloadText(text, 'erd-diagram.json', 'application/json');
+}
+
+interface FileSystemFileHandleLike {
+  createWritable(): Promise<{ write(data: string): Promise<void>; close(): Promise<void> }>;
 }
 
 function ensureFileInput(): HTMLInputElement {
