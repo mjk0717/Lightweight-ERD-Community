@@ -320,7 +320,8 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: Entity): void {
   ctx.textBaseline = 'middle';
   ctx.fillText(entityRenderer.displayName(entity), box.x + 8, box.y + theme.headerHeight / 2 + 1, box.w - 16);
 
-  entity.columns.forEach((col, idx) => {
+  // Match the on-screen view: logical mode hides system columns.
+  entityRenderer.visibleColumns(entity).forEach((col, idx) => {
     const rowY = box.y + theme.headerHeight + idx * theme.rowHeight;
     ctx.fillStyle = rowBackground(col, idx);
     ctx.fillRect(box.x, rowY, box.w, theme.rowHeight);

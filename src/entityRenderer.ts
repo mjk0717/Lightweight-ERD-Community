@@ -6,8 +6,16 @@ import { Box, Column, Entity, RowCenter } from './types';
 let layerEl: HTMLElement;
 const nodeMap = new Map<string, HTMLElement>();
 
+// Columns actually shown for an entity: logical view hides system (audit)
+// columns since they aren't part of the business model; physical shows all.
+// Everything visual (row rendering, box height, relation endpoint Y) goes
+// through this so the box, rows and connectors all stay consistent.
+function visibleColumns(entity: Entity): Column[] {
+  return state.data.designMode === 'logical' ? entity.columns.filter((c) => !c.isSystem) : entity.columns;
+}
+
 function entityHeight(entity: Entity): number {
-  return theme.headerHeight + entity.columns.length * theme.rowHeight;
+  return theme.headerHeight + visibleColumns(entity).length * theme.rowHeight;
 }
 
 function getEntityBox(id: string): Box | null {
@@ -16,11 +24,14 @@ function getEntityBox(id: string): Box | null {
   return { x: e.x, y: e.y, w: theme.entityWidth, h: entityHeight(e) };
 }
 
-// world-space center point of a column's row, for relation endpoints
+// world-space center point of a column's row, for relation endpoints. Uses
+// the visible-column index so endpoints stay aligned when system columns are
+// hidden; returns null for a column that isn't currently shown (its relation
+// then hides too).
 function getColumnRowCenter(entityId: string, colId: string): RowCenter | null {
   const e = state.getEntity(entityId);
   if (!e) return null;
-  const idx = e.columns.findIndex((c) => c.id === colId);
+  const idx = visibleColumns(e).findIndex((c) => c.id === colId);
   if (idx === -1) return null;
   return {
     x: e.x,
@@ -96,7 +107,7 @@ function updateEntityNode(node: HTMLElement, entity: Entity): void {
   if (body.dataset.rowsSig !== sig) {
     body.dataset.rowsSig = sig;
     body.innerHTML = '';
-    entity.columns.forEach((col, idx) => {
+    visibleColumns(entity).forEach((col, idx) => {
       const row = document.createElement('div');
       row.className = rowClass(col, idx);
       row.dataset.colId = col.id;
@@ -169,6 +180,6 @@ function init(layer: HTMLElement): void {
 }
 
 export const entityRenderer = {
-  init, render, entityHeight, getEntityBox, getColumnRowCenter,
+  init, render, entityHeight, getEntityBox, getColumnRowCenter, visibleColumns,
   displayName: displayEntityName, displayColumnName
 };
