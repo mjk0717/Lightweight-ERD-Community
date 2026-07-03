@@ -285,9 +285,6 @@ body { display: flex; flex-direction: column; }
 .rel-pairs-readout { margin-bottom: 10px; }
 .rel-pairs-readout .hint { display: block; margin-bottom: 4px; }
 
-/* ---------- system columns modal ---------- */
-.sys-col-grid td, .sys-col-grid th { padding: 4px 6px; }
-
 /* ---------- ddl export (bulk) ---------- */
 .ddl-export-vendor-row {
   display: flex; align-items: center; gap: 8px;
