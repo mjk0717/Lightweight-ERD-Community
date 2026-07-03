@@ -63,8 +63,8 @@ const MENUS: MenuEntry[] = [
       { label: 'Angular lines', checked: () => state.data.lineStyle === 'angular', onClick: () => state.setLineStyle('angular') }
     ]
   },
-  { title: 'Import', onClick: () => ddlImport.open() },
-  { title: 'Export', onClick: () => exportWizard.open() }
+  { title: 'Reverse Engineering', onClick: () => ddlImport.open() },
+  { title: 'Forward Engineering', onClick: () => exportWizard.open() }
 ];
 
 function closeProject(): void {

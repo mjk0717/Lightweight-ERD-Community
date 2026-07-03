@@ -90,7 +90,7 @@ function open(): void {
     });
     wireStepNav(body);
 
-    modal.transition({ title: 'Export', width: '640px', body, actions: [] }, direction);
+    modal.transition({ title: 'Forward Engineering', width: '640px', body, actions: [] }, direction);
   }
 
   function renderExecute(direction: Direction = 'left'): void {
@@ -108,7 +108,7 @@ function open(): void {
     wireStepNav(body);
 
     modal.transition({
-      title: 'Export',
+      title: 'Forward Engineering',
       width: '640px',
       body,
       actions: [
@@ -190,7 +190,7 @@ function open(): void {
     wireStepNav(body);
 
     modal.transition({
-      title: 'Export',
+      title: 'Forward Engineering',
       width: '820px',
       body,
       actions: [
@@ -222,7 +222,7 @@ function open(): void {
     const actions: ModalAction[] = [{ label: 'Back', onClick: () => renderExecute('right') }];
     if (dataUrl) actions.push({ label: 'Download PNG', variant: 'primary', onClick: () => downloadDataUrl(dataUrl, 'erd-diagram.png') });
 
-    modal.transition({ title: 'Export', width: '700px', body, actions }, direction);
+    modal.transition({ title: 'Forward Engineering', width: '700px', body, actions }, direction);
   }
 
   function renderResultSql(direction: Direction): void {
@@ -236,7 +236,7 @@ function open(): void {
     wireStepNav(body);
 
     modal.transition({
-      title: 'Export',
+      title: 'Forward Engineering',
       width: '760px',
       body,
       actions: [

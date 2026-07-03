@@ -150,7 +150,7 @@ function open(): void {
     });
     wireStepNav(body);
 
-    modal.transition({ title: 'Import DDL', width: '640px', body, actions: [] }, direction);
+    modal.transition({ title: 'Reverse Engineering', width: '640px', body, actions: [] }, direction);
   }
 
   function renderExecuteSql(direction: Direction = 'left'): void {
@@ -186,7 +186,7 @@ function open(): void {
     wireStepNav(body);
 
     modal.transition({
-      title: 'Import DDL',
+      title: 'Reverse Engineering',
       width: '820px',
       body,
       actions: [
@@ -241,7 +241,7 @@ function open(): void {
     wireStepNav(body);
 
     modal.transition({
-      title: 'Import DDL',
+      title: 'Reverse Engineering',
       width: '700px',
       body,
       actions: [
@@ -301,7 +301,7 @@ function open(): void {
     wireStepNav(body);
 
     const opts = {
-      title: 'Import DDL',
+      title: 'Reverse Engineering',
       width: '700px',
       body,
       actions: applied

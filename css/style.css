@@ -63,7 +63,8 @@ body { display: flex; flex-direction: column; }
   background: #fff; border-radius: 50%;
   transition: transform 0.15s;
 }
-.toggle input:checked + .toggle-track { background: #2563eb; }
+/* Physical mode: only the circle slides across - the track keeps its neutral
+   color (no blue fill). */
 .toggle input:checked + .toggle-track .toggle-thumb { transform: translateX(18px); }
 
 .btn {
