@@ -49,6 +49,7 @@ Then open `index.html` directly in a browser - no server needed.
 - **Edit columns like a spreadsheet** - click-drag across cells to select a range, then copy/paste or Delete as usual
 - **Import DDL** - click `Import DDL` and paste `CREATE TABLE`/`ALTER TABLE` statements
 - **Export** - `Export PNG` for a snapshot, `Export DDL` for bulk or per-table DDL, `Export JSON` to save/reload the full diagram
+- **Auto-load** - when served over http(s), an `erd-diagram.json` sitting next to `index.html` is imported automatically on open (re-imported when the file changes; a plain refresh keeps your in-progress edits). Browsers block reading sibling files from `file://`, so this needs a local server
 - **Undo/redo** - `Ctrl+Z` / `Ctrl+Y` (or the toolbar buttons) while working on the canvas
 - **Switch views** - use the Logical/Physical toggle in the toolbar
 

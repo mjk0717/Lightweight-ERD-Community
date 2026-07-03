@@ -9,6 +9,7 @@ import { menuBar } from './menuBar';
 import { minimap } from './minimap';
 import { contextMenu } from './contextMenu';
 import { history } from './history';
+import { jsonIO } from './jsonIO';
 import { closest, nextId } from './util';
 import { Entity } from './types';
 
@@ -135,6 +136,10 @@ function init(): void {
   const syncHint = () => { hint.style.display = state.data.entities.length ? 'none' : ''; };
   syncHint();
   state.on('change', syncHint);
+
+  // Pick up an erd-diagram.json next to index.html (new or changed since the
+  // last auto-load). Async and best-effort - see jsonIO.autoLoad.
+  void jsonIO.autoLoad();
 }
 
 document.addEventListener('DOMContentLoaded', init);

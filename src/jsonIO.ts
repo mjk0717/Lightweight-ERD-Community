@@ -75,4 +75,41 @@ function importJson(): void {
   ensureFileInput().click();
 }
 
-export const jsonIO = { exportJson, importJson };
+// Fingerprint of the last auto-loaded erd-diagram.json. Auto-load only
+// replaces the working state when the sidecar file is new or its content
+// changed - a plain refresh with the same file keeps the user's in-progress
+// (localStorage) edits instead of clobbering them with the older file.
+const AUTOLOAD_KEY = 'erd_tool_autoload_v1';
+
+function fingerprint(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return h + ':' + text.length;
+}
+
+// Best-effort startup import of an erd-diagram.json sitting next to
+// index.html. Works when the app is served over http(s); browsers block
+// reading sibling files from a plain file:// page, in which case the fetch
+// throws and this silently no-ops.
+async function autoLoad(): Promise<void> {
+  let text: string;
+  try {
+    const res = await fetch('erd-diagram.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    text = await res.text();
+  } catch (e) {
+    return; // no file, or file:// fetch blocked - nothing to auto-load
+  }
+  try {
+    const fp = fingerprint(text);
+    if (localStorage.getItem(AUTOLOAD_KEY) === fp) return;
+    const parsed = JSON.parse(text) as Partial<SerializedState>;
+    state.replaceAll(parsed);
+    history.importHistory(parsed.history);
+    localStorage.setItem(AUTOLOAD_KEY, fp);
+  } catch (e) {
+    // Malformed sidecar file - leave the current diagram untouched.
+  }
+}
+
+export const jsonIO = { exportJson, importJson, autoLoad };
