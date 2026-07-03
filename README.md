@@ -6,8 +6,6 @@
 
 Offline-capable HTML ERD editor. TypeScript sources in `src/`, bundled with esbuild into `dist/bundle.js`, which `index.html` loads via a plain `<script>` tag (no ES modules, so it also runs from `file://` with no server).
 
-![Lightweight-ERD screenshot](image.png)
-
 <!--
   Screenshot/GIF checklist (replace the placeholder above once captured):
   1. npm run build
