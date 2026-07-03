@@ -273,10 +273,23 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
         mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
       }
     } else if (!aHorizontal && !bHorizontal) {
-      const midY = (stubA.y + stubB.y) / 2;
-      ctx.lineTo(markerA.x, midY);
-      ctx.lineTo(markerB.x, midY);
-      mid = { x: (markerA.x + markerB.x) / 2, y: midY };
+      // Mirror of the horizontal case for two vertical anchors: when crossed
+      // (an up/down relation whose tables are side by side) route with a
+      // vertical connector in the horizontal gap instead of a horizontal one
+      // that would cut through the boxes.
+      const opposite = dirA.y === -dirB.y;
+      const facingToward = dirA.y * (markerB.y - markerA.y) >= 0;
+      if (opposite && !facingToward) {
+        const midX = (markerA.x + markerB.x) / 2;
+        ctx.lineTo(midX, markerA.y);
+        ctx.lineTo(midX, markerB.y);
+        mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
+      } else {
+        const midY = (stubA.y + stubB.y) / 2;
+        ctx.lineTo(markerA.x, midY);
+        ctx.lineTo(markerB.x, midY);
+        mid = { x: (markerA.x + markerB.x) / 2, y: midY };
+      }
     } else {
       const bend = aHorizontal ? { x: markerB.x, y: markerA.y } : { x: markerA.x, y: markerB.y };
       ctx.lineTo(bend.x, bend.y);

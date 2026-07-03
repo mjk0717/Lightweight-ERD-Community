@@ -253,9 +253,23 @@ function angularPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSid
       mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
     }
   } else if (!aHorizontal && !bHorizontal) {
-    const midY = (stubA.y + stubB.y) / 2;
-    bends = [{ x: markerA.x, y: midY }, { x: markerB.x, y: midY }];
-    mid = { x: (markerA.x + markerB.x) / 2, y: midY };
+    // Mirror of the horizontal case for two vertical (top/bottom) anchors:
+    // the usual horizontal mid-connector is clean only when the anchors face
+    // toward each other (A-bottom above B-top). When they're crossed - e.g.
+    // an up/down relation whose tables are now side by side - that connector
+    // folds back through the boxes, so route with a vertical connector in the
+    // horizontal gap instead.
+    const opposite = dirA.y === -dirB.y;
+    const facingToward = dirA.y * (markerB.y - markerA.y) >= 0;
+    if (opposite && !facingToward) {
+      const midX = (markerA.x + markerB.x) / 2;
+      bends = [{ x: midX, y: markerA.y }, { x: midX, y: markerB.y }];
+      mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
+    } else {
+      const midY = (stubA.y + stubB.y) / 2;
+      bends = [{ x: markerA.x, y: midY }, { x: markerB.x, y: midY }];
+      mid = { x: (markerA.x + markerB.x) / 2, y: midY };
+    }
   } else {
     const bend = aHorizontal ? { x: markerB.x, y: markerA.y } : { x: markerA.x, y: markerB.y };
     bends = [bend];
