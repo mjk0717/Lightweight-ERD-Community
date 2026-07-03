@@ -1,13 +1,6 @@
 import { state } from './state';
 import { nextId } from './util';
 import { modalEntity } from './modalEntity';
-import { modalSystemColumns } from './modalSystemColumns';
-import { ddlImport } from './ddlImport';
-import { ddlExport } from './ddlExport';
-import { pngExport } from './pngExport';
-import { jsonIO } from './jsonIO';
-import { viewport } from './viewport';
-import { history } from './history';
 import { Entity } from './types';
 
 function addTableAt(x: number, y: number): void {
@@ -19,22 +12,12 @@ function addTableAt(x: number, y: number): void {
   modalEntity.openNew(entity);
 }
 
-function clearAll(): void {
-  if (!window.confirm('Remove all tables and relations? System column definitions are kept.')) return;
-  state.data.entities = [];
-  state.data.relations = [];
-  state.emit('change');
-}
-
-function bind(id: string, handler: () => void): void {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('click', handler);
-}
-
+// The Logical/Physical toggle switch lives in the toolbar (kept as a
+// quick-access control alongside the menu bar's View menu). Label order is
+// Logical (left) - toggle - Physical (right): unchecked = Logical, checked =
+// Physical, and it re-syncs whenever the mode changes elsewhere (e.g. the
+// View menu).
 function initModeSwitch(): void {
-  // Label order is Logical (left) - toggle - Physical (right), so the thumb
-  // sits on whichever side matches the active mode: unchecked/left = Logical,
-  // checked/right = Physical.
   const toggle = document.getElementById('mode-toggle') as HTMLInputElement | null;
   if (!toggle) return;
   const sync = () => { toggle.checked = state.data.designMode === 'physical'; };
@@ -43,40 +26,8 @@ function initModeSwitch(): void {
   state.on('change', sync);
 }
 
-function initLineStyleButton(): void {
-  const btn = document.getElementById('btn-line-style');
-  if (!btn) return;
-  const sync = () => { btn.textContent = state.data.lineStyle === 'angular' ? 'Line: Angular' : 'Line: Curved'; };
-  sync();
-  btn.addEventListener('click', () => state.setLineStyle(state.data.lineStyle === 'angular' ? 'curved' : 'angular'));
-  state.on('change', sync);
-}
-
-function initUndoRedoButtons(): void {
-  const undoBtn = document.getElementById('btn-undo') as HTMLButtonElement | null;
-  const redoBtn = document.getElementById('btn-redo') as HTMLButtonElement | null;
-  if (!undoBtn || !redoBtn) return;
-  const sync = () => { undoBtn.disabled = !history.canUndo(); redoBtn.disabled = !history.canRedo(); };
-  sync();
-  undoBtn.addEventListener('click', () => { history.undo(); sync(); });
-  redoBtn.addEventListener('click', () => { history.redo(); sync(); });
-  state.on('change', sync);
-  state.on('move', sync);
-  state.on('select', sync);
-}
-
 function init(): void {
-  bind('btn-import-ddl', () => ddlImport.open());
-  bind('btn-export-png', () => pngExport.exportPng());
-  bind('btn-export-ddl', () => ddlExport.openBulk());
-  bind('btn-export-json', () => jsonIO.exportJson());
-  bind('btn-import-json', () => jsonIO.importJson());
-  bind('btn-system-columns', () => modalSystemColumns.open());
-  bind('btn-reset-view', () => viewport.resetView());
-  bind('btn-clear-all', clearAll);
   initModeSwitch();
-  initLineStyleButton();
-  initUndoRedoButtons();
 }
 
 export const toolbar = { init, addTableAt };

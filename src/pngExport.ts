@@ -321,9 +321,12 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: Entity): void {
   ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
 }
 
-function exportPng(): void {
+// Renders the whole diagram to a PNG data URL (null if there's nothing to
+// draw). Split out from exportPng so the Export wizard can show a preview
+// before the user commits to downloading.
+function renderDataUrl(): string | null {
   const b = bounds();
-  if (!b) { window.alert('Nothing to export - add a table first.'); return; }
+  if (!b) return null;
 
   const width = b.maxX - b.minX, height = b.maxY - b.minY;
   const canvas = document.createElement('canvas');
@@ -339,7 +342,13 @@ function exportPng(): void {
   state.data.relations.forEach((r) => drawRelation(ctx, r));
   state.data.entities.forEach((e) => drawEntity(ctx, e));
 
-  downloadDataUrl(canvas.toDataURL('image/png'), 'erd-diagram.png');
+  return canvas.toDataURL('image/png');
 }
 
-export const pngExport = { exportPng };
+function exportPng(): void {
+  const url = renderDataUrl();
+  if (!url) { window.alert('Nothing to export - add a table first.'); return; }
+  downloadDataUrl(url, 'erd-diagram.png');
+}
+
+export const pngExport = { exportPng, renderDataUrl };

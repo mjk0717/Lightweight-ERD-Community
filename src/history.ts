@@ -82,6 +82,7 @@ function applySnapshot(snap: Snapshot): void {
   state.data.relations = JSON.parse(JSON.stringify(snap.relations));
   state.data.systemColumns = JSON.parse(JSON.stringify(snap.systemColumns));
   state.data.selected = null;
+  state.data.selectedEntityIds = [];
   state.emit('change');
   state.emit('select');
   suppress = false;

@@ -123,8 +123,7 @@ function updateEntityNode(node: HTMLElement, entity: Entity): void {
     row.classList.toggle('row-highlighted', !!colId && hlIds.has(colId));
   });
 
-  const selected = state.data.selected;
-  node.classList.toggle('selected', !!(selected && selected.type === 'entity' && selected.id === entity.id));
+  node.classList.toggle('selected', state.isEntitySelected(entity.id));
 }
 
 function highlightedColumnIds(entityId: string): Set<string> {

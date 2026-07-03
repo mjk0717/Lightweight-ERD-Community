@@ -9,31 +9,15 @@
 <body>
   <header id="toolbar">
     <h1>Lightweight-ERD</h1>
-    <div class="toolbar-actions">
-      <button id="btn-undo" class="btn" type="button" title="Undo (Ctrl+Z)">↶ Undo</button>
-      <button id="btn-redo" class="btn" type="button" title="Redo (Ctrl+Y)">↷ Redo</button>
-      <span class="toolbar-sep"></span>
-      <button id="btn-import-ddl" class="btn" type="button">Import DDL</button>
-      <button id="btn-system-columns" class="btn" type="button">System columns</button>
-      <span class="toolbar-sep"></span>
-      <button id="btn-export-png" class="btn" type="button">Export PNG</button>
-      <button id="btn-export-ddl" class="btn" type="button">Export DDL</button>
-      <button id="btn-export-json" class="btn" type="button">Export JSON</button>
-      <button id="btn-import-json" class="btn" type="button">Import JSON</button>
-      <span class="toolbar-sep"></span>
-      <button id="btn-reset-view" class="btn" type="button">Reset view</button>
-      <button id="btn-clear-all" class="btn btn-danger" type="button">Clear all</button>
-      <span class="toolbar-sep"></span>
-      <button id="btn-line-style" class="btn" type="button">Line: Curved</button>
-      <span class="toolbar-sep"></span>
-      <div class="mode-switch">
-        <span class="mode-label">Logical</span>
-        <label class="toggle">
-          <input type="checkbox" id="mode-toggle">
-          <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        </label>
-        <span class="mode-label">Physical</span>
-      </div>
+    <nav id="menu-bar"></nav>
+    <div class="toolbar-spacer"></div>
+    <div class="mode-switch">
+      <span class="mode-label">Logical</span>
+      <label class="toggle">
+        <input type="checkbox" id="mode-toggle">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
+      <span class="mode-label">Physical</span>
     </div>
   </header>
 

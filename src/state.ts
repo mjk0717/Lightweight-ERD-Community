@@ -22,6 +22,7 @@ const data: AppData = {
   systemColumns: [],
   view: { scale: 1, x: 0, y: 0 },
   selected: null,
+  selectedEntityIds: [],
   designMode: 'logical',
   lineStyle: 'curved'
 };
@@ -74,6 +75,9 @@ function replaceAll(next: Partial<SerializedState>): void {
   data.view = next.view || { scale: 1, x: 0, y: 0 };
   data.designMode = next.designMode || 'logical';
   data.lineStyle = next.lineStyle || 'curved';
+  // A loaded project's ids have nothing to do with the previous selection.
+  data.selected = null;
+  data.selectedEntityIds = [];
   notify('change');
 }
 
@@ -251,17 +255,49 @@ function setSystemColumns(list: SystemColumnDef[]): void {
 
 function select(type: SelectionType, id: string): void {
   data.selected = { type, id } as Selection;
+  // Selecting a relation clears the entity multi-selection; selecting an
+  // entity collapses it to just that one.
+  data.selectedEntityIds = type === 'entity' ? [id] : [];
   emit('select');
 }
+
+// Ctrl/Cmd+click behavior: add the entity to the selection if not present,
+// remove it if it already is. The primary `selected` follows the most
+// recent still-selected entity so single-entity operations keep working.
+function toggleEntitySelection(id: string): void {
+  const idx = data.selectedEntityIds.indexOf(id);
+  if (idx === -1) {
+    data.selectedEntityIds.push(id);
+    data.selected = { type: 'entity', id };
+  } else {
+    data.selectedEntityIds.splice(idx, 1);
+    const last = data.selectedEntityIds[data.selectedEntityIds.length - 1];
+    data.selected = last ? { type: 'entity', id: last } : null;
+  }
+  emit('select');
+}
+
+function isEntitySelected(id: string): boolean {
+  return data.selectedEntityIds.indexOf(id) !== -1;
+}
+
+// Batch header-color change - used when a color is picked while several
+// entities are multi-selected, so one click recolors them all.
+function setHeaderColorForEntities(ids: string[], color: string): void {
+  ids.forEach((id) => { const e = getEntity(id); if (e) e.headerColor = color; });
+  notify('change');
+}
+
 function clearSelection(): void {
   data.selected = null;
+  data.selectedEntityIds = [];
   emit('select');
 }
 
 export const state = {
   data,
   on, off, emit: notify, load, persist, replaceAll,
-  select, clearSelection, setDesignMode, setLineStyle,
+  select, clearSelection, toggleEntitySelection, isEntitySelected, setHeaderColorForEntities, setDesignMode, setLineStyle,
   nextEntityPosition,
   addEntity, getEntity, updateEntity, removeEntity, moveEntity,
   getColumn, addColumn, updateColumn, removeColumn, reorderColumns,

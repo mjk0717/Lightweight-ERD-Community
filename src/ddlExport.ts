@@ -1,6 +1,7 @@
 import { state } from './state';
 import { modal } from './modal';
 import { escapeHtml, copyToClipboard } from './util';
+import { DbVendor } from './ddlExtractSql';
 import { Column, Entity, Relation } from './types';
 
 function escapeSqlString(s: string): string {
@@ -8,174 +9,153 @@ function escapeSqlString(s: string): string {
 }
 
 export interface DdlGenOptions {
+  vendor?: DbVendor;
   owner?: string;
   tablespace?: string;
   indexTablespace?: string;
 }
 
-function qualifiedTableName(name: string, owner?: string): string {
-  return (owner ? '"' + owner + '".' : '') + '"' + name + '"';
+// Identifier quoting is the one syntax difference that touches every
+// generated statement - Oracle/PostgreSQL both use ANSI double quotes,
+// MySQL uses backticks, SQL Server uses brackets.
+function quoteIdentifier(name: string, vendor: DbVendor): string {
+  if (vendor === 'mysql') return '`' + name + '`';
+  if (vendor === 'mssql') return '[' + name + ']';
+  return '"' + name + '"';
+}
+
+function qualifiedTableName(name: string, vendor: DbVendor, owner?: string): string {
+  return (owner ? quoteIdentifier(owner, vendor) + '.' : '') + quoteIdentifier(name, vendor);
+}
+
+// TABLESPACE is understood as-is by Oracle, PostgreSQL, and MySQL (InnoDB
+// general tablespaces); SQL Server has no TABLESPACE keyword - its nearest
+// equivalent is assigning the table to a filegroup via ON.
+function tablespaceClause(name: string, vendor: DbVendor): string {
+  return vendor === 'mssql' ? '\nON [' + name + ']' : '\nTABLESPACE ' + name;
+}
+
+// Per-index tablespace placement for the PK constraint - Oracle/PostgreSQL
+// both support USING INDEX TABLESPACE verbatim; SQL Server again uses ON
+// with a filegroup; MySQL has no per-index tablespace at the constraint
+// level, only whole-table, so there's nothing to add here.
+function indexTablespaceClause(name: string, vendor: DbVendor): string {
+  if (vendor === 'mysql') return '';
+  if (vendor === 'mssql') return ' ON [' + name + ']';
+  return ' USING INDEX TABLESPACE ' + name;
+}
+
+// SQL Server has no COMMENT ON statement - table/column descriptions are
+// stored as an MS_Description extended property via this system procedure
+// instead. Schema defaults to dbo when no owner is set, matching SQL
+// Server's own default schema.
+function mssqlDescriptionProperty(schema: string, tableName: string, columnName: string | undefined, comment: string): string {
+  const lines = [
+    'EXEC sp_addextendedproperty @name = N\'MS_Description\', @value = N\'' + escapeSqlString(comment) + '\',',
+    '  @level0type = N\'SCHEMA\', @level0name = ' + quoteIdentifier(schema, 'mssql') + ',',
+    '  @level1type = N\'TABLE\', @level1name = ' + quoteIdentifier(tableName, 'mssql') + (columnName ? ',' : ';')
+  ];
+  if (columnName) lines.push('  @level2type = N\'COLUMN\', @level2name = ' + quoteIdentifier(columnName, 'mssql') + ';');
+  return lines.join('\n');
+}
+
+function tableCommentStatement(entity: Entity, vendor: DbVendor, owner: string | undefined, qualifiedName: string): string | null {
+  if (!entity.comment) return null;
+  if (vendor === 'mssql') return mssqlDescriptionProperty(owner || 'dbo', entity.name, undefined, entity.comment);
+  return 'COMMENT ON TABLE ' + qualifiedName + ' IS \'' + escapeSqlString(entity.comment) + '\';';
+}
+
+function columnCommentStatement(entity: Entity, col: Column, vendor: DbVendor, owner: string | undefined, qualifiedName: string): string | null {
+  if (!col.comment) return null;
+  if (vendor === 'mssql') return mssqlDescriptionProperty(owner || 'dbo', entity.name, col.name, col.comment);
+  return 'COMMENT ON COLUMN ' + qualifiedName + '.' + quoteIdentifier(col.name, vendor) + ' IS \'' + escapeSqlString(col.comment) + '\';';
 }
 
 // Generates a CREATE TABLE ... COMMENT ON ... script for one entity -
 // intentionally just that range (no ALTER TABLE / FK constraints), matching
 // what a reverse-engineered dump's per-table section usually looks like.
+// MySQL has no COMMENT ON statement, so its table/column comments are
+// folded inline into the CREATE TABLE instead of appended as separate
+// statements the way Oracle/PostgreSQL/SQL Server's are.
 function generateDdl(entity: Entity, opts?: DdlGenOptions): string {
-  const qualifiedName = qualifiedTableName(entity.name, opts?.owner);
-  const colLines = entity.columns.map((c) => '  "' + c.name + '" ' + c.dataType + (c.nullable ? '' : ' NOT NULL'));
+  const vendor: DbVendor = opts?.vendor || 'oracle';
+  const isMySql = vendor === 'mysql';
+  const qualifiedName = qualifiedTableName(entity.name, vendor, opts?.owner);
+
+  const colLines = entity.columns.map((c) => {
+    let line = '  ' + quoteIdentifier(c.name, vendor) + ' ' + c.dataType + (c.nullable ? '' : ' NOT NULL');
+    if (isMySql && c.comment) line += ' COMMENT \'' + escapeSqlString(c.comment) + '\'';
+    return line;
+  });
   const pkCols = entity.columns.filter((c) => c.pk);
   if (pkCols.length) {
-    let pkLine = '  CONSTRAINT "' + entity.name + '_PK" PRIMARY KEY (' + pkCols.map((c) => '"' + c.name + '"').join(', ') + ')';
-    if (opts?.indexTablespace) pkLine += ' USING INDEX TABLESPACE ' + opts.indexTablespace;
+    let pkLine = '  CONSTRAINT ' + quoteIdentifier(entity.name + '_PK', vendor) + ' PRIMARY KEY (' + pkCols.map((c) => quoteIdentifier(c.name, vendor)).join(', ') + ')';
+    if (opts?.indexTablespace) pkLine += indexTablespaceClause(opts.indexTablespace, vendor);
     colLines.push(pkLine);
   }
 
-  const tableEnd = ')' + (opts?.tablespace ? '\nTABLESPACE ' + opts.tablespace : '') + ';';
+  let tableEnd = ')';
+  if (opts?.tablespace) tableEnd += tablespaceClause(opts.tablespace, vendor);
+  if (isMySql && entity.comment) tableEnd += ' COMMENT=\'' + escapeSqlString(entity.comment) + '\'';
+  tableEnd += ';';
   const statements = ['CREATE TABLE ' + qualifiedName + ' (\n' + colLines.join(',\n') + '\n' + tableEnd];
 
-  if (entity.comment) {
-    statements.push('COMMENT ON TABLE ' + qualifiedName + ' IS \'' + escapeSqlString(entity.comment) + '\';');
+  if (!isMySql) {
+    const tableComment = tableCommentStatement(entity, vendor, opts?.owner, qualifiedName);
+    if (tableComment) statements.push(tableComment);
+    entity.columns.forEach((c) => {
+      const colComment = columnCommentStatement(entity, c, vendor, opts?.owner, qualifiedName);
+      if (colComment) statements.push(colComment);
+    });
   }
-  entity.columns.forEach((c) => {
-    if (c.comment) {
-      statements.push('COMMENT ON COLUMN ' + qualifiedName + '."' + c.name + '" IS \'' + escapeSqlString(c.comment) + '\';');
-    }
-  });
 
   return statements.join('\n\n');
 }
 
 // DROP TABLE ... for one entity - kept separate from generateDdl() since drop
 // export is opt-in (the bulk export's "Include DROP TABLE" checkbox).
-function generateDropTableDdl(entity: Entity, owner?: string): string {
-  return 'DROP TABLE ' + qualifiedTableName(entity.name, owner) + ';';
+function generateDropTableDdl(entity: Entity, vendor: DbVendor, owner?: string): string {
+  return 'DROP TABLE ' + qualifiedTableName(entity.name, vendor, owner) + ';';
 }
 
 // ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES ... for one
 // relation - kept separate from generateDdl() since FK export is opt-in
 // (the bulk export's "Include FK constraints" checkbox).
-function generateFkConstraintDdl(relation: Relation, sourceEntity: Entity, targetEntity: Entity, owner?: string): string {
+function generateFkConstraintDdl(relation: Relation, sourceEntity: Entity, targetEntity: Entity, vendor: DbVendor, owner?: string): string {
   const sourceCols = relation.columnPairs.map((p) => sourceEntity.columns.find((c) => c.id === p.sourceColumnId)).filter((c): c is Column => !!c);
   const targetCols = relation.columnPairs.map((p) => targetEntity.columns.find((c) => c.id === p.targetColumnId)).filter((c): c is Column => !!c);
   const constraintName = relation.name || (sourceEntity.name + '_' + targetEntity.name + '_FK');
-  return 'ALTER TABLE ' + qualifiedTableName(sourceEntity.name, owner) + ' ADD CONSTRAINT "' + constraintName + '" FOREIGN KEY (' +
-    sourceCols.map((c) => '"' + c.name + '"').join(', ') + ') REFERENCES ' + qualifiedTableName(targetEntity.name, owner) + ' (' +
-    targetCols.map((c) => '"' + c.name + '"').join(', ') + ');';
+  return 'ALTER TABLE ' + qualifiedTableName(sourceEntity.name, vendor, owner) + ' ADD CONSTRAINT ' + quoteIdentifier(constraintName, vendor) + ' FOREIGN KEY (' +
+    sourceCols.map((c) => quoteIdentifier(c.name, vendor)).join(', ') + ') REFERENCES ' + qualifiedTableName(targetEntity.name, vendor, owner) + ' (' +
+    targetCols.map((c) => quoteIdentifier(c.name, vendor)).join(', ') + ');';
 }
 
-// Toolbar-level export: a checklist of every table (all checked by default)
-// next to a live-updating textarea with the combined DDL for whichever
-// tables are currently checked.
-function openBulk(): void {
-  const entities = state.data.entities;
-  if (!entities.length) { window.alert('There are no tables to export.'); return; }
+export interface BulkDdlOptions extends DdlGenOptions {
+  includeDrop: boolean;
+  includeFk: boolean;
+}
 
-  const body = document.createElement('div');
-  body.innerHTML =
-    '<label class="col-check-row ddl-export-fk-toggle"><input type="checkbox" class="f-ddl-include-drop"> Include DROP TABLE statements</label>' +
-    '<label class="col-check-row ddl-export-fk-toggle"><input type="checkbox" class="f-ddl-include-fk" checked> Include FK constraints (ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ...)</label>' +
-    '<div class="col-check-row ddl-export-fk-toggle ddl-export-ts-row">' +
-      '<span class="ddl-export-ts-pair">' +
-        '<label><input type="checkbox" class="f-ddl-include-owner"> Owner</label>' +
-        '<input type="text" class="f-ddl-owner-input" placeholder="e.g. SCOTT" disabled>' +
-      '</span>' +
-      '<span class="ddl-export-ts-pair">' +
-        '<label><input type="checkbox" class="f-ddl-include-tablespace"> Tablespace</label>' +
-        '<input type="text" class="f-ddl-tablespace-input" placeholder="e.g. USERS" disabled>' +
-      '</span>' +
-      '<span class="ddl-export-ts-pair">' +
-        '<label><input type="checkbox" class="f-ddl-include-idx-tablespace"> Index Tablespace</label>' +
-        '<input type="text" class="f-ddl-idx-tablespace-input" placeholder="e.g. INDX" disabled>' +
-      '</span>' +
-    '</div>' +
-    '<div class="ddl-export-grid">' +
-      '<div class="ddl-export-list">' +
-        '<label class="col-check-row ddl-export-select-all"><input type="checkbox" class="f-ddl-select-all" checked> Select All</label>' +
-        entities.map((e) =>
-          '<label class="col-check-row"><input type="checkbox" class="f-ddl-check" value="' + e.id + '" checked> ' + escapeHtml(e.name) + '</label>'
-        ).join('') +
-      '</div>' +
-      '<textarea class="f-ddl-output" rows="20" readonly></textarea>' +
-    '</div>';
-
-  const checks = Array.from(body.querySelectorAll('.f-ddl-check')) as HTMLInputElement[];
-  const selectAllToggle = body.querySelector('.f-ddl-select-all') as HTMLInputElement;
-  const dropToggle = body.querySelector('.f-ddl-include-drop') as HTMLInputElement;
-  const fkToggle = body.querySelector('.f-ddl-include-fk') as HTMLInputElement;
-  const ownerToggle = body.querySelector('.f-ddl-include-owner') as HTMLInputElement;
-  const ownerInput = body.querySelector('.f-ddl-owner-input') as HTMLInputElement;
-  const tablespaceToggle = body.querySelector('.f-ddl-include-tablespace') as HTMLInputElement;
-  const tablespaceInput = body.querySelector('.f-ddl-tablespace-input') as HTMLInputElement;
-  const idxTablespaceToggle = body.querySelector('.f-ddl-include-idx-tablespace') as HTMLInputElement;
-  const idxTablespaceInput = body.querySelector('.f-ddl-idx-tablespace-input') as HTMLInputElement;
-  const textarea = body.querySelector('.f-ddl-output') as HTMLTextAreaElement;
-
-  function currentDdl(): string {
-    const checkedIds = new Set(checks.filter((c) => c.checked).map((c) => c.value));
-    const checkedEntities = entities.filter((e) => checkedIds.has(e.id));
-    const owner = ownerToggle.checked ? ownerInput.value.trim() || undefined : undefined;
-    const genOpts: DdlGenOptions = {
-      owner,
-      tablespace: tablespaceToggle.checked ? tablespaceInput.value.trim() || undefined : undefined,
-      indexTablespace: idxTablespaceToggle.checked ? idxTablespaceInput.value.trim() || undefined : undefined
-    };
-    const parts: string[] = [];
-    checkedEntities.forEach((e) => {
-      if (dropToggle.checked) parts.push(generateDropTableDdl(e, owner));
-      parts.push(generateDdl(e, genOpts));
-      if (fkToggle.checked) {
-        state.data.relations.forEach((r) => {
-          if (r.sourceEntityId !== e.id || !checkedIds.has(r.targetEntityId)) return;
-          const tgt = state.getEntity(r.targetEntityId);
-          if (tgt) parts.push(generateFkConstraintDdl(r, e, tgt, owner));
-        });
-      }
-    });
-    return parts.join('\n\n');
-  }
-  function updateOutput(): void { textarea.value = currentDdl(); }
-  function syncSelectAll(): void {
-    const checkedCount = checks.filter((c) => c.checked).length;
-    selectAllToggle.checked = checkedCount === checks.length;
-    selectAllToggle.indeterminate = checkedCount > 0 && checkedCount < checks.length;
-  }
-  selectAllToggle.addEventListener('change', () => {
-    checks.forEach((c) => { c.checked = selectAllToggle.checked; });
-    selectAllToggle.indeterminate = false;
-    updateOutput();
+// Combined DDL for a chosen set of entities, in the same per-table order
+// used everywhere else: optional DROP, then CREATE/comments, then that
+// table's outgoing FK constraints (only to other selected tables). Shared
+// by the Export wizard's SQL path - the wizard owns the options UI, this
+// owns the SQL assembly.
+function generateBulkDdl(entityIds: string[], opts: BulkDdlOptions): string {
+  const selected = new Set(entityIds);
+  const entities = state.data.entities.filter((e) => selected.has(e.id));
+  const parts: string[] = [];
+  entities.forEach((e) => {
+    if (opts.includeDrop) parts.push(generateDropTableDdl(e, opts.vendor || 'oracle', opts.owner));
+    parts.push(generateDdl(e, opts));
+    if (opts.includeFk) {
+      state.data.relations.forEach((r) => {
+        if (r.sourceEntityId !== e.id || !selected.has(r.targetEntityId)) return;
+        const tgt = state.getEntity(r.targetEntityId);
+        if (tgt) parts.push(generateFkConstraintDdl(r, e, tgt, opts.vendor || 'oracle', opts.owner));
+      });
+    }
   });
-  checks.forEach((c) => c.addEventListener('change', () => { syncSelectAll(); updateOutput(); }));
-  dropToggle.addEventListener('change', updateOutput);
-  fkToggle.addEventListener('change', updateOutput);
-  ownerToggle.addEventListener('change', () => {
-    ownerInput.disabled = !ownerToggle.checked;
-    if (ownerToggle.checked) ownerInput.focus();
-    updateOutput();
-  });
-  ownerInput.addEventListener('input', updateOutput);
-  tablespaceToggle.addEventListener('change', () => {
-    tablespaceInput.disabled = !tablespaceToggle.checked;
-    if (tablespaceToggle.checked) tablespaceInput.focus();
-    updateOutput();
-  });
-  idxTablespaceToggle.addEventListener('change', () => {
-    idxTablespaceInput.disabled = !idxTablespaceToggle.checked;
-    if (idxTablespaceToggle.checked) idxTablespaceInput.focus();
-    updateOutput();
-  });
-  tablespaceInput.addEventListener('input', updateOutput);
-  idxTablespaceInput.addEventListener('input', updateOutput);
-  updateOutput();
-
-  modal.open({
-    title: 'Export DDL',
-    width: '920px',
-    body,
-    actions: [
-      { label: 'Close', onClick: () => modal.close() },
-      { label: 'Copy to clipboard', variant: 'primary', onClick: () => copyToClipboard(textarea.value) }
-    ]
-  });
+  return parts.join('\n\n');
 }
 
 function open(entityId: string): void {
@@ -200,4 +180,4 @@ function open(entityId: string): void {
   });
 }
 
-export const ddlExport = { open, openBulk, generateDdl };
+export const ddlExport = { open, generateDdl, generateBulkDdl };

@@ -51,12 +51,19 @@ function show(items: ContextMenuItem[], x: number, y: number, headerEl?: HTMLEle
 
 // Same palette as the table-details modal (see modalEntity.ts's
 // renderPalette) - lets the header color be changed with one click,
-// directly from the right-click menu.
+// directly from the right-click menu. When the right-clicked entity is part
+// of a multi-selection, the chosen color is applied to every selected
+// entity at once (batch recolor); otherwise just this one.
 function buildPaletteHeader(entity: Entity): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'header-color-palette context-menu-palette';
+  const targetIds = state.isEntitySelected(entity.id) && state.data.selectedEntityIds.length > 1
+    ? state.data.selectedEntityIds.slice()
+    : [entity.id];
   function render(): void {
-    wrap.innerHTML = '';
+    wrap.innerHTML = targetIds.length > 1
+      ? '<span class="hint">Recolor ' + targetIds.length + ' tables</span>'
+      : '';
     HEADER_COLOR_PALETTE.forEach((color) => {
       const swatch = document.createElement('button');
       swatch.type = 'button';
@@ -65,7 +72,8 @@ function buildPaletteHeader(entity: Entity): HTMLElement {
       swatch.title = color;
       swatch.addEventListener('click', (e) => {
         e.stopPropagation();
-        state.updateEntity(entity.id, { headerColor: color });
+        state.setHeaderColorForEntities(targetIds, color);
+        entity.headerColor = color;
         render();
       });
       wrap.appendChild(swatch);

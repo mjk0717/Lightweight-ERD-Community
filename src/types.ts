@@ -84,7 +84,13 @@ export interface AppData {
   relations: Relation[];
   systemColumns: SystemColumnDef[];
   view: ViewState;
+  // The primary selection - drives the relation-edit path and single-entity
+  // operations. For entities it always mirrors the last entity added to
+  // selectedEntityIds.
   selected: Selection | null;
+  // All currently-selected entities (Ctrl+click builds this up). A single
+  // plain click leaves exactly one id here; relation selection empties it.
+  selectedEntityIds: string[];
   designMode: DesignMode;
   lineStyle: LineStyle;
 }

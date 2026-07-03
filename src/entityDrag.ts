@@ -32,11 +32,16 @@ function startMove(entityId: string, startEvent: MouseEvent): void {
 function onMouseDown(e: MouseEvent): void {
   if (e.button !== 0) return;
   const target = e.target as HTMLElement;
+  const multi = e.ctrlKey || e.metaKey;
   const header = closest(target, (el) => el.classList && el.classList.contains('entity-header'));
   if (header) {
     e.stopPropagation();
     const entityNode = closest(header, (el) => !!el.dataset && !!el.dataset.entityId)!;
     const entityId = entityNode.dataset.entityId!;
+    // Ctrl/Cmd+click toggles this entity in the multi-selection instead of
+    // starting a move - so several tables can be picked for a batch action
+    // (e.g. recoloring all their headers at once).
+    if (multi) { state.toggleEntitySelection(entityId); return; }
     state.select('entity', entityId);
     startMove(entityId, e);
     return;
@@ -49,6 +54,7 @@ function onMouseDown(e: MouseEvent): void {
     e.stopPropagation();
     const entityNode = closest(body, (el) => !!el.dataset && !!el.dataset.entityId)!;
     const entityId = entityNode.dataset.entityId!;
+    if (multi) { state.toggleEntitySelection(entityId); return; }
     state.select('entity', entityId);
     relationInteraction.start(entityId, e);
   }
@@ -76,8 +82,12 @@ function onContextMenu(e: MouseEvent): void {
   // orphaned node, fail to find .entity, and clobber this menu with the
   // empty-canvas one - stop the event here so it never gets that far.
   e.stopPropagation();
-  state.select('entity', entityNode.dataset.entityId!);
-  contextMenu.showForEntity(entityNode.dataset.entityId!, e.clientX, e.clientY);
+  const entityId = entityNode.dataset.entityId!;
+  // Right-clicking one of several multi-selected tables keeps the whole
+  // selection intact (so the menu's color palette can batch-recolor them);
+  // right-clicking an unselected table selects just that one first.
+  if (!state.isEntitySelected(entityId)) state.select('entity', entityId);
+  contextMenu.showForEntity(entityId, e.clientX, e.clientY);
 }
 
 function init(layer: HTMLElement): void {

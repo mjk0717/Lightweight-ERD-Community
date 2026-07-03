@@ -5,11 +5,19 @@ import { entityDrag } from './entityDrag';
 import { relationRenderer } from './relationRenderer';
 import { relationInteraction } from './relationInteraction';
 import { toolbar } from './toolbar';
+import { menuBar } from './menuBar';
 import { contextMenu } from './contextMenu';
 import { history } from './history';
 import { closest } from './util';
 
 function deleteSelected(): void {
+  // Multi-selected entities delete together; otherwise fall back to the
+  // single primary selection (which also covers relation selection).
+  if (state.data.selectedEntityIds.length) {
+    state.data.selectedEntityIds.slice().forEach((id) => state.removeEntity(id));
+    state.clearSelection();
+    return;
+  }
   const sel = state.data.selected;
   if (!sel) return;
   if (sel.type === 'entity') {
@@ -61,6 +69,7 @@ function init(): void {
   entityDrag.init(entityLayer);
   relationRenderer.init(svg);
   toolbar.init();
+  menuBar.init();
 
   viewportEl.addEventListener('click', onCanvasBackgroundClick);
   viewportEl.addEventListener('contextmenu', onCanvasBackgroundContextMenu);
