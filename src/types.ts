@@ -65,6 +65,7 @@ export interface SystemColumnDef {
   name: string;
   dataType: string;
   comment: string;
+  defaultValue?: string;
 }
 
 export interface ViewState {

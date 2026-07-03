@@ -236,9 +236,11 @@ function applySystemColumnsToEntity(e: Entity): void {
       col.name = def.name;
       col.dataType = def.dataType;
       col.comment = def.comment;
+      col.defaultValue = def.defaultValue || '';
     } else {
       e.columns.push({
         id: nextId('col'), name: def.name, dataType: def.dataType, comment: def.comment,
+        defaultValue: def.defaultValue || '',
         pk: false, fk: false, nullable: true, isSystem: true, systemColId: def.id
       });
     }
