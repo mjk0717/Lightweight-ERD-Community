@@ -230,9 +230,28 @@ function angularPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSid
   let bends: Point[];
   let mid: Point;
   if (aHorizontal && bHorizontal) {
-    const midX = (stubA.x + stubB.x) / 2;
-    bends = [{ x: midX, y: markerA.y }, { x: midX, y: markerB.y }];
-    mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
+    // Two horizontal (left/right) anchors. The usual routing drops a single
+    // vertical connector at the midpoint x and runs a horizontal stub out of
+    // each entity to it. That's clean only when the anchors face TOWARD each
+    // other (e.g. A-right sitting left of B-left) so the connector lands in
+    // the gap between them. When they're crossed - the same A-right/B-left
+    // pair but the tables have been stacked vertically, so A's right marker
+    // is now to the right of B's left marker - that vertical connector falls
+    // back inside the table bodies and the stubs cut straight through them.
+    // In that case route the other way: a horizontal connector at the mid y
+    // (the vertical gap between the stacked tables), giving a stepped "ㄹ"
+    // path that stays outside both boxes.
+    const opposite = dirA.x === -dirB.x;
+    const facingToward = dirA.x * (markerB.x - markerA.x) >= 0;
+    if (opposite && !facingToward) {
+      const midY = (markerA.y + markerB.y) / 2;
+      bends = [{ x: markerA.x, y: midY }, { x: markerB.x, y: midY }];
+      mid = { x: (markerA.x + markerB.x) / 2, y: midY };
+    } else {
+      const midX = (stubA.x + stubB.x) / 2;
+      bends = [{ x: midX, y: markerA.y }, { x: midX, y: markerB.y }];
+      mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
+    }
   } else if (!aHorizontal && !bHorizontal) {
     const midY = (stubA.y + stubB.y) / 2;
     bends = [{ x: markerA.x, y: midY }, { x: markerB.x, y: midY }];

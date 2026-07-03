@@ -242,10 +242,24 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
     const aHorizontal = geom.aSide === 'left' || geom.aSide === 'right';
     const bHorizontal = geom.bSide === 'left' || geom.bSide === 'right';
     if (aHorizontal && bHorizontal) {
-      const midX = (stubA.x + stubB.x) / 2;
-      ctx.lineTo(midX, markerA.y);
-      ctx.lineTo(midX, markerB.y);
-      mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
+      // Mirror relationRenderer.angularPath: a vertical mid-connector only
+      // works when the two horizontal anchors face toward each other; when
+      // they're crossed (e.g. A-right/B-left but the tables are stacked
+      // vertically) route with a horizontal connector in the gap instead so
+      // the line doesn't cut back through the table bodies.
+      const opposite = dirA.x === -dirB.x;
+      const facingToward = dirA.x * (markerB.x - markerA.x) >= 0;
+      if (opposite && !facingToward) {
+        const midY = (markerA.y + markerB.y) / 2;
+        ctx.lineTo(markerA.x, midY);
+        ctx.lineTo(markerB.x, midY);
+        mid = { x: (markerA.x + markerB.x) / 2, y: midY };
+      } else {
+        const midX = (stubA.x + stubB.x) / 2;
+        ctx.lineTo(midX, markerA.y);
+        ctx.lineTo(midX, markerB.y);
+        mid = { x: midX, y: (markerA.y + markerB.y) / 2 };
+      }
     } else if (!aHorizontal && !bHorizontal) {
       const midY = (stubA.y + stubB.y) / 2;
       ctx.lineTo(markerA.x, midY);
