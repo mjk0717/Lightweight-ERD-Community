@@ -80,3 +80,21 @@ export const ORACLE_TYPES: string[] = [
   'NUMBER', 'NUMBER(10)', 'NUMBER(10,2)', 'NUMBER(1)',
   'CHAR(1)', 'DATE', 'TIMESTAMP', 'CLOB', 'BLOB', 'INTEGER', 'FLOAT', 'RAW(16)', 'NVARCHAR2(100)'
 ];
+
+// Vendor-neutral ANSI/ISO SQL types, offered in Logical mode where the model
+// isn't yet tied to a specific database product.
+export const ANSI_TYPES: string[] = [
+  'VARCHAR(50)', 'VARCHAR(100)', 'VARCHAR(200)', 'VARCHAR(4000)',
+  'CHARACTER VARYING(255)', 'CHAR(1)', 'NCHAR(1)', 'NVARCHAR(100)',
+  'INTEGER', 'SMALLINT', 'BIGINT', 'NUMERIC', 'NUMERIC(10)', 'NUMERIC(10,2)', 'DECIMAL(10,2)',
+  'FLOAT', 'REAL', 'DOUBLE PRECISION',
+  'BOOLEAN', 'DATE', 'TIME', 'TIMESTAMP', 'TIMESTAMP WITH TIME ZONE',
+  'CLOB', 'BLOB'
+];
+
+// Column data-type autocomplete suggestions for the current design mode:
+// ANSI standard types while modeling logically, physical Oracle types once in
+// Physical mode.
+export function dataTypeSuggestions(mode: string): string[] {
+  return mode === 'logical' ? ANSI_TYPES : ORACLE_TYPES;
+}

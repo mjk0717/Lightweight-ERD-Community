@@ -1,6 +1,6 @@
 import { state } from './state';
 import { modal } from './modal';
-import { escapeHtml, ORACLE_TYPES } from './util';
+import { escapeHtml, dataTypeSuggestions } from './util';
 import { SystemColumnDef } from './types';
 
 let draft: SystemColumnDef[] = [];
@@ -33,7 +33,7 @@ function renderRow(def: SystemColumnDef, idx: number): HTMLTableRowElement {
     '<td class="col-order">' + (idx + 1) + '</td>' +
     '<td><input type="text" class="f-name" value="' + escapeHtml(def.name) + '"></td>' +
     '<td><input type="text" class="f-comment" value="' + escapeHtml(def.comment || '') + '"></td>' +
-    '<td><input type="text" class="f-type" list="oracle-types-datalist" value="' + escapeHtml(def.dataType) + '"></td>' +
+    '<td><input type="text" class="f-type" list="col-type-datalist" value="' + escapeHtml(def.dataType) + '"></td>' +
     '<td><input type="text" class="f-default" value="' + escapeHtml(def.defaultValue || '') + '"></td>' +
     '<td><button type="button" class="btn-icon btn-del-sys" title="Remove">✕</button></td>';
 
@@ -230,7 +230,7 @@ function open(): void {
   const body = document.createElement('div');
   body.innerHTML =
     '<p class="hint">System columns are appended to every table (shown in yellow) - e.g. CREATED_BY, CREATED_DATE.</p>' +
-    '<datalist id="oracle-types-datalist">' + ORACLE_TYPES.map((t) => '<option value="' + t + '">').join('') + '</datalist>' +
+    '<datalist id="col-type-datalist">' + dataTypeSuggestions(state.data.designMode).map((t) => '<option value="' + t + '">').join('') + '</datalist>' +
     '<table class="col-grid">' +
       '<thead><tr><th></th><th>#</th><th>Name</th><th>Comment</th><th>Data type</th><th>Default</th><th></th></tr></thead>' +
       '<tbody></tbody>' +

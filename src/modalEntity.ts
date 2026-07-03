@@ -1,6 +1,6 @@
 import { state } from './state';
 import { modal } from './modal';
-import { escapeHtml, nextId, ORACLE_TYPES } from './util';
+import { escapeHtml, nextId, dataTypeSuggestions } from './util';
 import { HEADER_COLOR_PALETTE, theme } from './theme';
 import { Column, Entity } from './types';
 
@@ -95,7 +95,7 @@ function renderRow(col: Column, idx: number): HTMLTableRowElement {
     '<td class="col-order">' + (idx + 1) + '</td>' +
     '<td><input type="text" class="f-name" value="' + escapeHtml(col.name) + '" ' + (col.isSystem ? 'disabled' : '') + '></td>' +
     '<td><input type="text" class="f-comment" value="' + escapeHtml(col.comment || '') + '" ' + (col.isSystem ? 'disabled' : '') + '></td>' +
-    '<td><input type="text" class="f-type" list="oracle-types-datalist" value="' + escapeHtml(col.dataType) + '" ' + (col.isSystem ? 'disabled' : '') + '></td>' +
+    '<td><input type="text" class="f-type" list="col-type-datalist" value="' + escapeHtml(col.dataType) + '" ' + (col.isSystem ? 'disabled' : '') + '></td>' +
     '<td><input type="text" class="f-default" value="' + escapeHtml(col.defaultValue || '') + '" ' + (col.isSystem ? 'disabled' : '') + '></td>' +
     '<td class="col-check"><input type="checkbox" class="f-pk" ' + (col.pk ? 'checked' : '') + '></td>' +
     '<td class="col-check"><input type="checkbox" class="f-null" ' + (col.nullable ? 'checked' : '') + '></td>' +
@@ -321,8 +321,8 @@ function buildBody(entity: Entity): HTMLElement {
   document.addEventListener('keydown', onModalKeydown);
 
   const datalist = document.createElement('datalist');
-  datalist.id = 'oracle-types-datalist';
-  datalist.innerHTML = ORACLE_TYPES.map((t) => '<option value="' + t + '">').join('');
+  datalist.id = 'col-type-datalist';
+  datalist.innerHTML = dataTypeSuggestions(state.data.designMode).map((t) => '<option value="' + t + '">').join('');
   wrap.appendChild(datalist);
 
   const head = document.createElement('div');
