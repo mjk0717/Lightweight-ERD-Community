@@ -102,6 +102,9 @@ body { display: flex; flex-direction: column; }
   width: 8000px; height: 6000px;
   pointer-events: none;
   overflow: visible;
+  /* Stop the relation label text from being text-selected (blue highlight)
+     when a relation is double-clicked to open its editor. */
+  user-select: none; -webkit-user-select: none;
 }
 #relation-svg .relation-hit { pointer-events: stroke; cursor: pointer; }
 #relation-svg .relation-handle { pointer-events: all; cursor: grab; }
