@@ -87,7 +87,9 @@ function newColumn(): Column {
 
 function renderRow(col: Column, idx: number): HTMLTableRowElement {
   const tr = document.createElement('tr');
-  tr.className = 'col-row' + (col.isSystem ? ' col-row-system' : '');
+  // The dragged row is faded only while an actual drag is in progress (this
+  // row is the one being dragged) - never on a plain mousedown/click.
+  tr.className = 'col-row' + (col.isSystem ? ' col-row-system' : '') + (dragIndex === idx ? ' dragging' : '');
   tr.innerHTML =
     '<td class="col-handle-cell"><span class="drag-handle" title="Drag to reorder">⋮⋮</span></td>' +
     '<td class="col-order">' + (idx + 1) + '</td>' +
@@ -136,9 +138,11 @@ function renderRow(col: Column, idx: number): HTMLTableRowElement {
   const handle = tr.querySelector('.drag-handle') as HTMLElement;
   handle.addEventListener('mousedown', (e) => {
     e.preventDefault();
+    // Arm a potential drag but apply no visual change yet - the row is only
+    // marked "dragging" once it actually starts moving (see renderRow /
+    // onDragMove), so a click that never drags leaves the row untouched.
     dragIndex = idx;
     dragMoved = false;
-    tr.classList.add('dragging');
     document.addEventListener('mousemove', onDragMove);
     document.addEventListener('mouseup', onDragEnd);
   });
@@ -164,10 +168,14 @@ function onDragMove(e: MouseEvent): void {
 }
 
 function onDragEnd(): void {
+  const moved = dragMoved;
   dragIndex = null;
+  dragMoved = false;
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mouseup', onDragEnd);
-  if (dragMoved) { dragMoved = false; pushHistory(); }
+  // Only a real reorder touches anything: re-render to drop the drag fade and
+  // record an undo step. A plain click did nothing, so there's nothing to do.
+  if (moved) { renderGrid(); pushHistory(); }
 }
 
 function cellInput(row: number, col: number): HTMLInputElement | null {
