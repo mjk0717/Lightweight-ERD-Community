@@ -1,6 +1,6 @@
 # Lightweight-ERD
 
-[![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![No server needed](https://img.shields.io/badge/runs%20from-file%3A%2F%2F-success)](#setup)
 
