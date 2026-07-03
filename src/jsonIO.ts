@@ -1,4 +1,5 @@
 import { state } from './state';
+import { history } from './history';
 import { downloadText, readFileAsText } from './util';
 import { SerializedState } from './types';
 
@@ -13,7 +14,8 @@ async function exportJson(): Promise<void> {
   const data = state.data;
   const payload: SerializedState = {
     entities: data.entities, relations: data.relations, systemColumns: data.systemColumns, view: data.view,
-    designMode: data.designMode, lineStyle: data.lineStyle
+    designMode: data.designMode, lineStyle: data.lineStyle, minimapVisible: data.minimapVisible,
+    history: history.exportHistory()
   };
   const text = JSON.stringify(payload, null, 2);
 
@@ -55,6 +57,10 @@ function ensureFileInput(): HTMLInputElement {
       try {
         const parsed = JSON.parse(text) as Partial<SerializedState>;
         state.replaceAll(parsed);
+        // Restore the saved undo/redo stack (or reset to a single checkpoint
+        // of the loaded document when the file carries none). Must run after
+        // replaceAll, which is what put the document into state.
+        history.importHistory(parsed.history);
       } catch (e) {
         window.alert('Could not read that file as ERD JSON: ' + (e as Error).message);
       }

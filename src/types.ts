@@ -96,6 +96,17 @@ export interface AppData {
   minimapVisible: boolean;
 }
 
+export interface HistorySnapshot {
+  entities: Entity[];
+  relations: Relation[];
+  systemColumns: SystemColumnDef[];
+}
+
+export interface HistoryData {
+  stack: HistorySnapshot[];
+  index: number;
+}
+
 export interface SerializedState {
   entities: Entity[];
   relations: Relation[];
@@ -104,6 +115,9 @@ export interface SerializedState {
   designMode: DesignMode;
   lineStyle: LineStyle;
   minimapVisible?: boolean;
+  // Optional undo/redo stack saved alongside the project (up to 100 steps),
+  // so opening a project restores its edit history too.
+  history?: HistoryData;
 }
 
 export interface Box {

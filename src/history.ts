@@ -1,6 +1,6 @@
 import { state } from './state';
 import { debounce } from './util';
-import { Entity, Relation, SystemColumnDef } from './types';
+import { HistorySnapshot, HistoryData } from './types';
 
 // App-wide undo/redo over the diagram's actual content (entities,
 // relations, system column definitions) - not view/selection/design-mode/
@@ -13,13 +13,9 @@ import { Entity, Relation, SystemColumnDef } from './types';
 // MAX_HISTORY full-document snapshots) so undo/redo survives a page
 // refresh - not just the current document, saved separately by state.ts.
 
-interface Snapshot {
-  entities: Entity[];
-  relations: Relation[];
-  systemColumns: SystemColumnDef[];
-}
+type Snapshot = HistorySnapshot;
 
-const MAX_HISTORY = 50;
+const MAX_HISTORY = 100;
 const DEBOUNCE_MS = 400;
 const HISTORY_STORAGE_KEY = 'erd_tool_history_v1';
 
@@ -124,6 +120,33 @@ function onKeydown(e: KeyboardEvent): void {
   else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
 }
 
+// The current stack + index for saving inside a project file (deep-cloned,
+// and capped to the last MAX_HISTORY steps so a saved project never carries
+// more than that).
+function exportHistory(): HistoryData {
+  const start = Math.max(0, stack.length - MAX_HISTORY);
+  return { stack: JSON.parse(JSON.stringify(stack.slice(start))), index: Math.max(0, index - start) };
+}
+
+// Restores a stack saved with a project. Cancels the checkpoint that opening
+// the project just scheduled (so it can't clobber the restored stack), and -
+// when the project carries no history - resets to a single checkpoint of the
+// freshly-loaded document rather than leaving the previous project's history
+// hanging around. The caller has already put that document into state, so the
+// restored index's snapshot already matches what's on screen.
+function importHistory(data?: HistoryData): void {
+  if (debounceTimer !== null) { window.clearTimeout(debounceTimer); debounceTimer = null; }
+  if (data && Array.isArray(data.stack) && data.stack.length) {
+    stack = (JSON.parse(JSON.stringify(data.stack)) as Snapshot[]).slice(-MAX_HISTORY);
+    const idx = typeof data.index === 'number' ? data.index : stack.length - 1;
+    index = Math.min(Math.max(idx, 0), stack.length - 1);
+  } else {
+    stack = [cloneSnapshot()];
+    index = 0;
+  }
+  persistHistoryDebounced();
+}
+
 function init(): void {
   const loaded = loadHistory();
   // If the restored history doesn't already end at the current on-disk
@@ -138,4 +161,4 @@ function init(): void {
   document.addEventListener('keydown', onKeydown);
 }
 
-export const history = { init, undo, redo, canUndo, canRedo };
+export const history = { init, undo, redo, canUndo, canRedo, exportHistory, importHistory };
