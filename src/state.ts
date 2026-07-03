@@ -137,6 +137,13 @@ function moveEntity(id: string, x: number, y: number): void {
   notify('move');
 }
 
+// Moves several entities at once, emitting a single 'move' so a group drag
+// triggers one render pass instead of one per entity.
+function moveEntities(moves: { id: string; x: number; y: number }[]): void {
+  moves.forEach((m) => { const e = getEntity(m.id); if (e) { e.x = m.x; e.y = m.y; } });
+  notify('move');
+}
+
 // ---- columns ----
 function getColumn(entityId: string, colId: string): Column | null {
   const e = getEntity(entityId);
@@ -317,7 +324,7 @@ export const state = {
   on, off, emit: notify, load, persist, replaceAll,
   select, clearSelection, toggleEntitySelection, isEntitySelected, selectEntities, setHeaderColorForEntities, setDesignMode, setLineStyle, toggleMinimap,
   nextEntityPosition,
-  addEntity, getEntity, updateEntity, removeEntity, moveEntity,
+  addEntity, getEntity, updateEntity, removeEntity, moveEntity, moveEntities,
   getColumn, addColumn, updateColumn, removeColumn, reorderColumns,
   addRelation, getRelation, updateRelation, removeRelation, relationExists, relationExistsWithPairs,
   setSystemColumns, applySystemColumnsToEntity

@@ -7,18 +7,21 @@ import { contextMenu } from './contextMenu';
 
 let layerEl: HTMLElement;
 
-function startMove(entityId: string, startEvent: MouseEvent): void {
-  const entity = state.getEntity(entityId);
-  if (!entity) return;
+// Drags one or several entities together, keeping each at its own offset from
+// where it started (all shift by the same world-space delta).
+function startMove(entityIds: string[], startEvent: MouseEvent): void {
+  const origins = entityIds
+    .map((id) => { const e = state.getEntity(id); return e ? { id, x: e.x, y: e.y } : null; })
+    .filter((o): o is { id: string; x: number; y: number } => !!o);
+  if (!origins.length) return;
   const startWorld = viewport.screenToWorld(startEvent.clientX, startEvent.clientY);
-  const origin = { x: entity.x, y: entity.y };
   let moved = false;
 
   function onMove(ev: MouseEvent): void {
     const w = viewport.screenToWorld(ev.clientX, ev.clientY);
     const dx = w.x - startWorld.x, dy = w.y - startWorld.y;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
-    state.moveEntity(entityId, Math.round(origin.x + dx), Math.round(origin.y + dy));
+    state.moveEntities(origins.map((o) => ({ id: o.id, x: Math.round(o.x + dx), y: Math.round(o.y + dy) })));
   }
   function onUp(): void {
     document.removeEventListener('mousemove', onMove);
@@ -42,8 +45,15 @@ function onMouseDown(e: MouseEvent): void {
     // starting a move - so several tables can be picked for a batch action
     // (e.g. recoloring all their headers at once).
     if (multi) { state.toggleEntitySelection(entityId); return; }
-    state.select('entity', entityId);
-    startMove(entityId, e);
+    // Grabbing the header of a table that's part of a multi-selection drags
+    // the whole selection together (keeping it intact); grabbing an unselected
+    // table selects just it and drags it alone.
+    if (state.isEntitySelected(entityId) && state.data.selectedEntityIds.length > 1) {
+      startMove(state.data.selectedEntityIds.slice(), e);
+    } else {
+      state.select('entity', entityId);
+      startMove([entityId], e);
+    }
     return;
   }
   // Anywhere else on the entity (the whole body, not just a specific column
