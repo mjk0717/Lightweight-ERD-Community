@@ -94,6 +94,22 @@ function markerAnchor(edge: Point, side: AnchorSide): Point {
   return { x: edge.x + dir.x * MARKER_CLEARANCE, y: edge.y + dir.y * MARKER_CLEARANCE };
 }
 
+// Mirror of relationRenderer.segIntersectsBox - whether an axis-aligned
+// segment cuts through a box interior, used to pick the elbow corner.
+function segIntersectsBox(p1: Point, p2: Point, box: Box, pad: number): boolean {
+  const left = box.x + pad, right = box.x + box.w - pad, top = box.y + pad, bottom = box.y + box.h - pad;
+  if (right <= left || bottom <= top) return false;
+  if (p1.y === p2.y) {
+    if (p1.y <= top || p1.y >= bottom) return false;
+    return Math.max(p1.x, p2.x) > left && Math.min(p1.x, p2.x) < right;
+  }
+  if (p1.x === p2.x) {
+    if (p1.x <= left || p1.x >= right) return false;
+    return Math.max(p1.y, p2.y) > top && Math.min(p1.y, p2.y) < bottom;
+  }
+  return false;
+}
+
 function drawCrowFoot(ctx: CanvasRenderingContext2D, point: Point, side: AnchorSide): void {
   // Prongs splay out right at the entity edge and converge to a single
   // point further along the line - like a foot planted against the box.
@@ -291,7 +307,18 @@ function drawRelation(ctx: CanvasRenderingContext2D, relation: Relation): void {
         mid = { x: (markerA.x + markerB.x) / 2, y: midY };
       }
     } else {
-      const bend = aHorizontal ? { x: markerB.x, y: markerA.y } : { x: markerA.x, y: markerB.y };
+      // Mixed anchors: pick the L-corner that doesn't send a stub back through
+      // a table body (matches relationRenderer.angularPath).
+      const corner1 = aHorizontal ? { x: markerB.x, y: markerA.y } : { x: markerA.x, y: markerB.y };
+      const corner2 = aHorizontal ? { x: markerA.x, y: markerB.y } : { x: markerB.x, y: markerA.y };
+      const clean = (corner: Point): boolean => {
+        const pts = [geom.aPt, markerA, corner, markerB, geom.bPt];
+        for (let i = 0; i < pts.length - 1; i++) {
+          if (segIntersectsBox(pts[i], pts[i + 1], aBox, 1) || segIntersectsBox(pts[i], pts[i + 1], bBox, 1)) return false;
+        }
+        return true;
+      };
+      const bend = (!clean(corner1) && clean(corner2)) ? corner2 : corner1;
       ctx.lineTo(bend.x, bend.y);
       mid = bend;
     }

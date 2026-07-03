@@ -217,7 +217,24 @@ function bezierPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSide
 // facing edges (left-right or top-bottom) get a single mid-line between two
 // stubs, like before; a horizontal edge paired with a vertical one gets a
 // single L-shaped bend at their intersection.
-function angularPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSide) {
+// True if the axis-aligned segment p1-p2 passes through a box's interior
+// (shrunk by pad). Used to pick the elbow corner that doesn't cut through a
+// table body.
+function segIntersectsBox(p1: Point, p2: Point, box: Box, pad: number): boolean {
+  const left = box.x + pad, right = box.x + box.w - pad, top = box.y + pad, bottom = box.y + box.h - pad;
+  if (right <= left || bottom <= top) return false;
+  if (p1.y === p2.y) {
+    if (p1.y <= top || p1.y >= bottom) return false;
+    return Math.max(p1.x, p2.x) > left && Math.min(p1.x, p2.x) < right;
+  }
+  if (p1.x === p2.x) {
+    if (p1.x <= left || p1.x >= right) return false;
+    return Math.max(p1.y, p2.y) > top && Math.min(p1.y, p2.y) < bottom;
+  }
+  return false;
+}
+
+function angularPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSide, avoid?: Box[]) {
   const markerA = markerAnchor(aPt, aSide);
   const markerB = markerAnchor(bPt, bSide);
   const dirA = sideDir(aSide), dirB = sideDir(bSide);
@@ -271,7 +288,23 @@ function angularPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSid
       mid = { x: (markerA.x + markerB.x) / 2, y: midY };
     }
   } else {
-    const bend = aHorizontal ? { x: markerB.x, y: markerA.y } : { x: markerA.x, y: markerB.y };
+    // Mixed: one horizontal + one vertical anchor -> a single L-shaped bend.
+    // There are two possible corners; the natural one (respecting each
+    // anchor's own axis first) can send its stub straight back through the
+    // anchor's own box - e.g. a top anchor whose partner has been moved below
+    // it. Try that corner first, then the other, and keep whichever doesn't
+    // cut through a table body.
+    const corner1 = aHorizontal ? { x: markerB.x, y: markerA.y } : { x: markerA.x, y: markerB.y };
+    const corner2 = aHorizontal ? { x: markerA.x, y: markerB.y } : { x: markerB.x, y: markerA.y };
+    const clean = (corner: Point): boolean => {
+      if (!avoid || !avoid.length) return true;
+      const pts = [aPt, markerA, corner, markerB, bPt];
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (avoid.some((box) => segIntersectsBox(pts[i], pts[i + 1], box, 1))) return false;
+      }
+      return true;
+    };
+    const bend = (!clean(corner1) && clean(corner2)) ? corner2 : corner1;
     bends = [bend];
     mid = bend;
   }
@@ -368,7 +401,7 @@ function selfLoopPath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSi
 
 function linePath(aPt: Point, aSide: AnchorSide, bPt: Point, bSide: AnchorSide, isSelf: boolean, avoid?: Box[]) {
   if (isSelf) return selfLoopPath(aPt, aSide, bPt, bSide, avoid && avoid[0]);
-  return state.data.lineStyle === 'angular' ? angularPath(aPt, aSide, bPt, bSide) : bezierPath(aPt, aSide, bPt, bSide, avoid);
+  return state.data.lineStyle === 'angular' ? angularPath(aPt, aSide, bPt, bSide, avoid) : bezierPath(aPt, aSide, bPt, bSide, avoid);
 }
 
 // Identifying relationship: the FK column also serves as (part of) the
