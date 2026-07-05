@@ -24,16 +24,17 @@ No install, no server, no accounts — [**try it right now in your browser →**
 
 ## Features
 
-- **Visual entity editing** — create tables from the right-click canvas menu, edit columns via double-click, drag headers to reposition, Ctrl+click to multi-select and move tables as a group
-- **Excel-like column grid** — click-drag to select a cell range, copy/paste (including multi-cell, straight from/to spreadsheets), Delete to clear, drag rows to reorder
-- **Relationships** — drag a table body onto another to connect, with crow's-foot/IE cardinality, composite (multi-column) FK support, and identifying vs. non-identifying (solid/dashed) lines derived from PK status
+- **Visual entity editing** — create tables from the right-click canvas menu, edit columns via the `Table details` modal, drag headers to reposition, Ctrl+click to multi-select and move tables as a group
+- **Logical / Physical modeling** — table names, column names, and data types are stored separately for logical and physical design; `Table details` swaps `Logical Name` / `Physical Name` and `Logical Column` / `Physical Column` order to match the active view
+- **Excel-like column grid** — click-drag to select a cell range, copy/paste (including multi-cell, straight from/to spreadsheets), Delete to clear, drag rows to reorder, and edit separate logical/physical data types
+- **Relationships** — drag a table body onto another to connect, with crow's-foot/IE cardinality, composite (multi-column) FK support, and identifying vs. non-identifying relation styles
+- **Relation highlighting** — selecting a table or relation highlights connected relation lines and the exact relation columns, and the highlight stays active while panning or using the minimap
 - **Draggable relation endpoints** — reposition either end anywhere along its entity's border, independent of the underlying FK column; self-referencing relations render as a clean arc, and angular routing steps around table bodies instead of cutting through them
-- **Relation highlighting** — clicking a relation highlights the exact parent/child columns it connects
-- **Logical / Physical modes** — toggle between business-friendly names/comments and physical table/column names
-- **DDL import** — parses `CREATE TABLE`, `COMMENT ON`, and `ALTER TABLE ... ADD CONSTRAINT` (including the multi-constraint `ADD ( ... )` form), correctly wiring FKs even across separate imports
-- **Reverse engineering** — one-query catalog-extraction SQL for Oracle / MySQL / PostgreSQL / SQL Server: run it against your database, paste the result, get your diagram
-- **Export** — PNG (relation-aware bounds, nothing clipped), bulk or per-table DDL (optional FK constraints), and JSON (full diagram state + undo history)
-- **System columns** — define common audit columns (`CREATED_BY`, `CREATED_DATE`, ...) once and apply them to every table, edited in the same spreadsheet-style grid
+- **Search** — `Ctrl+F` focuses the centered toolbar search box; matching entities and relations stay in color while non-matches dim to grayscale
+- **Dark mode** — switch from the toolbar icon or `View > Dark mode`; relation colors and canvas styling adapt for light and dark themes
+- **Import** — the top-level `Import` menu supports direct DDL paste, file import, and catalog-extraction SQL for Oracle / MySQL / PostgreSQL / SQL Server; the parser handles quoted identifiers, MySQL backticks, comments, FKs, and large imports with automatic grid layout
+- **Export** — the top-level `Export` menu generates SQL DDL, PNG snapshots (including a dark-mode PNG option), and JSON for full diagram state
+- **System columns** — define common audit columns (`CREATED_BY`, `CREATED_DATE`, ...) once and apply them to every table, edited in the same spreadsheet-style grid with logical/physical data types
 - **Undo/redo** — app-wide Ctrl+Z / Ctrl+Y covering every canvas action, persisted across page refreshes (last 50 steps)
 - **Fully offline** — no network calls, no telemetry; state persists in `sessionStorage` for the tab (use `Export JSON` to keep a diagram beyond the session)
 
@@ -61,10 +62,12 @@ Then open `index.html` directly in a browser — no server needed. TypeScript so
 - **Connect a relation** — drag a table's body onto another table (or back onto itself for a self-referencing relation)
 - **Reposition a relation endpoint** — click the relation to select it, then drag either end's handle along its entity's border
 - **Edit columns like a spreadsheet** — click-drag across cells to select a range, then copy/paste or Delete as usual
-- **Import DDL** — click `Import DDL` and paste `CREATE TABLE` / `ALTER TABLE` statements, or use the vendor catalog-extraction SQL to pull a schema from a live database
-- **Export** — `Export PNG` for a snapshot, `Export DDL` for bulk or per-table DDL, `Export JSON` to save/reload the full diagram
+- **Search** — press `Ctrl+F` to focus the search box and find tables, columns, data types, or relations
+- **Import** — click `Import` and paste `CREATE TABLE` / `ALTER TABLE` statements, load a `.sql` / `.txt` file, or generate vendor catalog-extraction SQL to pull a schema from a live database
+- **Export** — click `Export` to choose SQL DDL, PNG (light or dark), or JSON export
 - **Undo/redo** — `Ctrl+Z` / `Ctrl+Y` (or the toolbar buttons)
-- **Switch views** — use the Logical/Physical toggle in the toolbar
+- **Switch views** — use the Logical/Physical toggle in the toolbar or `View > Logical` / `View > Physical`
+- **Switch theme** — use the toolbar theme icon or `View > Dark mode`
 
 ## Scripts
 
